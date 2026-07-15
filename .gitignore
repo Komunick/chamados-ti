@@ -1,0 +1,25 @@
+# Dados reais e runtime — NUNCA versionar
+ti-data/
+*.log
+*.bak
+
+# Notificador (credenciais e runtime ficam na máquina do TI)
+notificador/config.json
+notificador/avisadas.json
+notificador/toast-tmp.ps1
+
+# Node
+node_modules/
+
+# Ferramentas de dev
+.specify/
+.claude/
+
+# Distribuição pesada
+*.zip
+*.msi
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

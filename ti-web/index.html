@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chamados de TI · Brazil Transports</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app" hidden>
+    <header class="topo">
+      <div class="marca">
+        <span class="marca-ico">🛠</span>
+        <div>
+          <div class="marca-titulo">Chamados de TI</div>
+          <div class="marca-sub">Brazil Transports</div>
+        </div>
+      </div>
+      <div class="topo-acoes">
+        <button class="btn btn-primario" id="btn-novo">+ Novo chamado</button>
+        <button class="btn btn-fantasma" id="btn-sino" title="Notificações">🔔<span class="sino-c" id="sino-c" hidden>0</span></button>
+        <button class="btn btn-fantasma" id="btn-usuarios" title="Usuários" hidden>👤</button>
+        <div class="quem">
+          <span id="quem-nome">—</span>
+          <button class="btn btn-fantasma btn-mini" id="btn-sair">Sair</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="conteudo">
+      <div class="filtros">
+        <div class="seg" id="seg-status">
+          <button class="seg-btn active" data-f="fila">Fila de atendimento <span class="seg-c" id="c-fila">0</span></button>
+          <button class="seg-btn" data-f="pendente">Pendentes <span class="seg-c" id="c-pend">0</span></button>
+          <button class="seg-btn" data-f="em_andamento">Em andamento <span class="seg-c" id="c-and">0</span></button>
+          <button class="seg-btn" data-f="finalizado">Finalizados <span class="seg-c" id="c-fin">0</span></button>
+          <button class="seg-btn" data-f="todos">Todos <span class="seg-c" id="c-tod">0</span></button>
+        </div>
+        <input class="busca" id="busca" placeholder="Buscar por título, nº, solicitante…" autocomplete="off">
+      </div>
+      <div id="lista"></div>
+    </main>
+  </div>
+
+  <div class="painel-fundo" id="painel-fundo" hidden></div>
+  <aside class="painel" id="painel" aria-hidden="true">
+    <header class="painel-topo">
+      <h2 id="painel-titulo">—</h2>
+      <button class="btn-x" id="painel-fechar" aria-label="Fechar">✕</button>
+    </header>
+    <div class="painel-corpo" id="painel-corpo"></div>
+  </aside>
+
+  <div class="aviso-wrap" id="aviso-wrap"></div>
+
+  <div class="login-fundo" id="login" hidden>
+    <div class="login-cartao">
+      <div class="login-ico">🛠</div>
+      <div class="login-titulo">Chamados de TI</div>
+      <div class="login-sub">Brazil Transports · entre com seu usuário</div>
+      <label>Login<input id="lg-login" autocomplete="username" autocapitalize="none"></label>
+      <label>Senha<input id="lg-senha" type="password" autocomplete="current-password"></label>
+      <div class="login-erro" id="lg-erro" hidden></div>
+      <button class="btn btn-primario login-btn" id="lg-entrar">Entrar</button>
+    </div>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
