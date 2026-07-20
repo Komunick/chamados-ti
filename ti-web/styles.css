@@ -1,10 +1,17 @@
+/* Chamados de TI — Brazil Transports. Design gerado no Google Stitch
+   (projeto "Chamados TI Brazil Transports") e portado para CSS puro, sem
+   CDN: verde-floresta #124F2C + ouro #D9B303, cartoes claros, pills de
+   prioridade/status e painel lateral. Tema controlado por data-tema no
+   <html> (chave localStorage 'ti.tema'); paleta inteira em variaveis. */
 :root {
   --verde: #124F2C;
   --verde-escuro: #0C3C20;
   --verde-claro: #E4F1E9;
   --ouro: #D9B303;
+  --ouro-hover: #C4A203;
+  --ouro-texto: #201A00;
   --fundo: #F1F4F2;
-  --branco: #ffffff;
+  --branco: #FFFFFF;
   --linha: #E3E8E4;
   --linha-forte: #CFD8D1;
   --texto: #182A1F;
@@ -16,15 +23,59 @@
   --alerta-claro: #FEF3E2;
   --azul: #175CD3;
   --azul-claro: #EAF1FD;
+  --campo: #FFFFFF;
+  --topo-a: #124F2C;
+  --topo-b: #0E3F23;
+  --topo-texto: #FFFFFF;
+  --aviso-fundo: #123324;
+  --aviso-texto: #EAF4EC;
+  --aviso-erro-fundo: #55201B;
+  --aviso-erro-texto: #FFE1DD;
   --raio: 12px;
   --raio-sm: 8px;
   --sombra: 0 1px 2px rgba(16,33,24,.06), 0 8px 24px rgba(16,33,24,.07);
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --mono: "JetBrains Mono", "Cascadia Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
 }
+
+/* ---------- Modo escuro ----------
+   Ativado com data-tema="escuro" no <html> (botao 🌙 no topo; preferencia
+   salva no navegador, padrao segue o sistema operacional). */
+[data-tema="escuro"] {
+  color-scheme: dark;
+  --verde: #6FBE93;
+  --verde-escuro: #85D0A6;
+  --verde-claro: #1D3226;
+  --fundo: #121613;
+  --branco: #1A201B;
+  --linha: #2F3831;
+  --linha-forte: #3D473E;
+  --texto: #E7EBE6;
+  --cinza: #98A39A;
+  --cinza-2: #74816F;
+  --perigo: #F19999;
+  --perigo-claro: #3F1C1C;
+  --alerta: #E5BC6A;
+  --alerta-claro: #37290F;
+  --azul: #7CB5F1;
+  --azul-claro: #16283F;
+  --campo: #232A24;
+  --topo-a: #0E2E1B;
+  --topo-b: #0A2214;
+  --aviso-fundo: #E7EBE6;
+  --aviso-texto: #16201A;
+  --aviso-erro-fundo: #F19999;
+  --aviso-erro-texto: #3F1C1C;
+  --sombra: 0 1px 3px rgba(0,0,0,.5);
+}
+/* Selects de status dentro dos cartoes e pills sob fundo escuro. */
+[data-tema="escuro"] .seg-btn.active { color: #10231A; }
+[data-tema="escuro"] .btn-verde { color: #10231A; }
+
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body {
-  margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  margin: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   background: var(--fundo); color: var(--texto); font-size: 14px; line-height: 1.45;
 }
 button { font-family: inherit; cursor: pointer; }
@@ -34,8 +85,9 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .topo {
   position: sticky; top: 0; z-index: 10;
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
-  background: linear-gradient(180deg, #124F2C, #0E3F23);
-  color: #fff; padding: 12px 22px;
+  background: linear-gradient(180deg, var(--topo-a), var(--topo-b));
+  color: var(--topo-texto); padding: 12px 22px;
+  border-bottom: 2px solid var(--ouro);
 }
 .marca { display: flex; align-items: center; gap: 12px; }
 .marca-ico { font-size: 24px; }
@@ -51,18 +103,20 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
   padding: 8px 14px; border-radius: var(--raio-sm); font-weight: 600; font-size: 13px;
 }
 .btn:hover { border-color: var(--cinza-2); }
-.btn-primario { background: var(--ouro); border-color: var(--ouro); color: #201A00; }
-.btn-primario:hover { background: #C4A203; border-color: #C4A203; }
+/* Primario OURO com texto escuro — CTA da marca (fixo nos dois temas). */
+.btn-primario { background: var(--ouro); border-color: var(--ouro); color: var(--ouro-texto); }
+.btn-primario:hover { background: var(--ouro-hover); border-color: var(--ouro-hover); color: var(--ouro-texto); }
 .btn-fantasma { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); color: #E8F0EA; position: relative; }
 .btn-fantasma:hover { background: rgba(255,255,255,.16); }
 .btn-mini { padding: 5px 10px; font-size: 12px; }
 .btn-verde { background: var(--verde); border-color: var(--verde); color: #fff; }
-.btn-verde:hover { background: var(--verde-escuro); }
+.btn-verde:hover { background: var(--verde-escuro); border-color: var(--verde-escuro); }
 .btn-x { background: none; border: none; font-size: 16px; color: var(--cinza); }
 .sino-c {
   position: absolute; top: -6px; right: -6px; background: var(--perigo); color: #fff;
   font-size: 10.5px; font-weight: 800; border-radius: 999px; padding: 1px 6px;
 }
+[data-tema="escuro"] .sino-c { color: #2A0F0F; }
 
 /* ---------- Filtros ---------- */
 .conteudo { max-width: 1080px; margin: 0 auto; padding: 20px 22px 80px; }
@@ -76,9 +130,10 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .seg-c { font-family: var(--mono); font-size: 11px; opacity: .85; }
 .busca {
   flex: 1; min-width: 220px; border: 1px solid var(--linha-forte); border-radius: 999px;
-  padding: 9px 16px; background: var(--branco); outline: none;
+  padding: 9px 16px; background: var(--branco); color: var(--texto); outline: none;
 }
-.busca:focus { border-color: var(--verde); box-shadow: 0 0 0 3px var(--verde-claro); }
+.busca:focus { border-color: var(--ouro); box-shadow: 0 0 0 3px var(--verde-claro); }
+.busca::placeholder { color: var(--cinza-2); }
 
 /* ---------- Lista de atendimento ---------- */
 .cartao {
@@ -99,12 +154,13 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .pri-media { background: var(--alerta-claro); color: var(--alerta); }
 .pri-baixa { background: var(--azul-claro); color: var(--azul); }
 .pill-urgente { background: var(--perigo); color: #fff; }
+[data-tema="escuro"] .pill-urgente { color: #2A0F0F; }
 .st-pendente { background: var(--alerta-claro); color: var(--alerta); }
 .st-em_andamento { background: var(--azul-claro); color: var(--azul); }
 .st-finalizado { background: var(--verde-claro); color: var(--verde); }
 .status-sel {
   border: 1px solid var(--linha-forte); border-radius: var(--raio-sm); padding: 6px 8px;
-  background: var(--branco); font-weight: 600; font-size: 12.5px;
+  background: var(--branco); color: var(--texto); font-weight: 600; font-size: 12.5px;
 }
 .c-coment { font-size: 12px; color: var(--cinza); white-space: nowrap; }
 .vazio { background: var(--branco); border: 1px dashed var(--linha-forte); border-radius: var(--raio); padding: 36px; text-align: center; color: var(--cinza); }
@@ -123,9 +179,10 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .campo { margin-bottom: 12px; }
 .campo label { display: block; font-size: 12px; font-weight: 700; color: var(--cinza); margin-bottom: 4px; }
 .campo input, .campo select, .campo textarea {
-  width: 100%; border: 1px solid var(--linha-forte); border-radius: var(--raio-sm); padding: 9px 11px; outline: none; background: #fff;
+  width: 100%; border: 1px solid var(--linha-forte); border-radius: var(--raio-sm); padding: 9px 11px; outline: none;
+  background: var(--campo); color: var(--texto);
 }
-.campo input:focus, .campo select:focus, .campo textarea:focus { border-color: var(--verde); box-shadow: 0 0 0 3px var(--verde-claro); }
+.campo input:focus, .campo select:focus, .campo textarea:focus { border-color: var(--ouro); box-shadow: 0 0 0 3px var(--verde-claro); }
 .campo-linha { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .chk { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 13.5px; cursor: pointer; padding: 8px 0; }
 .chk input { width: 17px; height: 17px; accent-color: var(--perigo); }
@@ -133,7 +190,7 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .desc { white-space: pre-wrap; background: var(--fundo); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 12px 14px; font-size: 13.5px; }
 .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; align-items: center; }
 .secao { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; color: var(--cinza); margin: 20px 0 8px; }
-.coment { border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 10px 12px; margin-bottom: 8px; background: #fff; }
+.coment { border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 10px 12px; margin-bottom: 8px; background: var(--branco); }
 .coment-quem { font-size: 12px; color: var(--cinza); margin-bottom: 3px; }
 .coment-texto { white-space: pre-wrap; font-size: 13.5px; }
 .hist { border-left: 2px solid var(--linha-forte); margin-left: 6px; padding-left: 14px; }
@@ -143,8 +200,8 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 
 /* ---------- Avisos (toasts na tela) ---------- */
 .aviso-wrap { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 90; display: flex; flex-direction: column; gap: 8px; align-items: center; }
-.aviso { background: #123324; color: #EAF4EC; border-radius: 10px; padding: 10px 18px; font-weight: 600; font-size: 13px; box-shadow: var(--sombra); transition: opacity .3s, transform .3s; }
-.aviso.erro { background: #55201B; color: #FFE1DD; }
+.aviso { background: var(--aviso-fundo); color: var(--aviso-texto); border-radius: 10px; padding: 10px 18px; font-weight: 600; font-size: 13px; box-shadow: var(--sombra); transition: opacity .3s, transform .3s; }
+.aviso.erro { background: var(--aviso-erro-fundo); color: var(--aviso-erro-texto); }
 
 /* ---------- Login ---------- */
 .login-fundo { position: fixed; inset: 0; background: linear-gradient(160deg, #0E3F23, #123324 60%, #0B2418); display: flex; align-items: center; justify-content: center; z-index: 100; }
@@ -153,8 +210,8 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .login-titulo { font-size: 18px; font-weight: 800; margin-top: 6px; }
 .login-sub { color: var(--cinza); font-size: 12.5px; margin: 4px 0 18px; }
 .login-cartao label { display: block; text-align: left; font-size: 12px; font-weight: 700; color: var(--cinza); margin-bottom: 10px; }
-.login-cartao input { width: 100%; margin-top: 4px; border: 1px solid var(--linha-forte); border-radius: var(--raio-sm); padding: 10px 12px; outline: none; }
-.login-cartao input:focus { border-color: var(--verde); box-shadow: 0 0 0 3px var(--verde-claro); }
+.login-cartao input { width: 100%; margin-top: 4px; border: 1px solid var(--linha-forte); border-radius: var(--raio-sm); padding: 10px 12px; outline: none; background: var(--campo); color: var(--texto); }
+.login-cartao input:focus { border-color: var(--ouro); box-shadow: 0 0 0 3px var(--verde-claro); }
 .login-btn { width: 100%; margin-top: 6px; padding: 11px; }
 .login-erro { background: var(--perigo-claro); color: var(--perigo); border-radius: var(--raio-sm); padding: 9px 12px; font-size: 12.5px; font-weight: 600; margin-bottom: 10px; }
 
