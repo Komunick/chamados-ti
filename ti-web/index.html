@@ -23,18 +23,30 @@
   <div id="app" hidden>
     <header class="topo">
       <div class="marca">
-        <span class="marca-ico">🛠</span>
-        <div>
+        <span class="marca-ico ico" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a9 9 0 0 0-9 9v6.5A3.5 3.5 0 0 0 6.5 21H8a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 8 13H5v-2a7 7 0 1 1 14 0v2h-3a1.5 1.5 0 0 0-1.5 1.5v5A1.5 1.5 0 0 0 16 21h1.5a3.5 3.5 0 0 0 3.5-3.5V11a9 9 0 0 0-9-9z"/></svg>
+        </span>
+        <div class="marca-texto">
           <div class="marca-titulo">Chamados de TI</div>
           <div class="marca-sub">Brazil Transports</div>
         </div>
       </div>
       <div class="topo-acoes">
         <button class="btn btn-primario" id="btn-novo">+ Novo chamado</button>
-        <button class="btn btn-fantasma" id="btn-tema" title="Alternar modo claro/escuro">🌙</button>
-        <button class="btn btn-fantasma" id="btn-sino" title="Notificações">🔔<span class="sino-c" id="sino-c" hidden>0</span></button>
-        <button class="btn btn-fantasma" id="btn-usuarios" title="Usuários" hidden>👤</button>
+        <span class="topo-sep" aria-hidden="true"></span>
+        <button class="btn-ico" id="btn-sino" title="Notificações" aria-label="Notificações">
+          <span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22a2.6 2.6 0 0 0 2.55-2.1h-5.1A2.6 2.6 0 0 0 12 22zm6.3-6.7V11a6.3 6.3 0 0 0-4.8-6.12v-.68a1.5 1.5 0 0 0-3 0v.68A6.3 6.3 0 0 0 5.7 11v4.3l-1.56 1.56a1 1 0 0 0 .71 1.71h14.3a1 1 0 0 0 .71-1.71z"/></svg></span>
+          <span class="sino-c" id="sino-c" hidden>0</span>
+        </button>
+        <button class="btn-ico" id="btn-tema" title="Alternar modo claro/escuro" aria-label="Alternar modo claro/escuro">
+          <span class="ico ico-lua" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.6 13.6A8.4 8.4 0 0 1 10.4 3.4a.7.7 0 0 0-.9-.85 9.4 9.4 0 1 0 12 12 .7.7 0 0 0-.9-.95z"/></svg></span>
+          <span class="ico ico-sol" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M5.2 18.8l1.6-1.6M17.2 6.8l1.6-1.6"/></svg></span>
+        </button>
+        <button class="btn-ico" id="btn-usuarios" title="Usuários" aria-label="Usuários" hidden>
+          <span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 11a3.6 3.6 0 1 0 0-7.2A3.6 3.6 0 0 0 9 11zm0 2c-3.9 0-6.8 1.9-6.8 4.4V19a1 1 0 0 0 1 1h11.6a1 1 0 0 0 1-1v-1.6c0-2.5-2.9-4.4-6.8-4.4zm7.4-2.2a3 3 0 1 0-2.1-5.1 5.5 5.5 0 0 1 .1 5c.6.1 1.3.1 2 .1zm.7 2.3c-.4 0-.8 0-1.2.1a5.6 5.6 0 0 1 2 4.2V19h3.9a1 1 0 0 0 1-1v-.9c0-2.3-2.6-4-5.7-4z"/></svg></span>
+        </button>
         <div class="quem">
+          <span class="quem-avatar ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a4.2 4.2 0 1 0 0-8.4A4.2 4.2 0 0 0 12 12zm0 2.2c-4.4 0-7.8 2.2-7.8 5V20a1 1 0 0 0 1 1h13.6a1 1 0 0 0 1-1v-.8c0-2.8-3.4-5-7.8-5z"/></svg></span>
           <span id="quem-nome">—</span>
           <button class="btn btn-fantasma btn-mini" id="btn-sair">Sair</button>
         </div>
@@ -69,9 +81,12 @@
 
   <div class="login-fundo" id="login" hidden>
     <div class="login-cartao">
-      <div class="login-ico">🛠</div>
+      <div class="login-ico ico" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a9 9 0 0 0-9 9v6.5A3.5 3.5 0 0 0 6.5 21H8a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 8 13H5v-2a7 7 0 1 1 14 0v2h-3a1.5 1.5 0 0 0-1.5 1.5v5A1.5 1.5 0 0 0 16 21h1.5a3.5 3.5 0 0 0 3.5-3.5V11a9 9 0 0 0-9-9z"/></svg>
+      </div>
       <div class="login-titulo">Chamados de TI</div>
-      <div class="login-sub">Brazil Transports · entre com seu usuário</div>
+      <div class="login-marca">Brazil Transports</div>
+      <div class="login-sub">Entre com seu usuário para acessar a fila de atendimento</div>
       <label>Login<input id="lg-login" autocomplete="username" autocapitalize="none"></label>
       <label>Senha<input id="lg-senha" type="password" autocomplete="current-password"></label>
       <div class="login-erro" id="lg-erro" hidden></div>
@@ -83,17 +98,12 @@
     // Alternância claro/escuro (preferência salva no navegador). Fica no
     // index.html, fora do app.js, como nos demais sistemas da casa.
     (function () {
-      var btn = document.getElementById('btn-tema');
-      function pintar() {
-        btn.textContent = document.documentElement.dataset.tema === 'escuro' ? '☀️' : '🌙';
-      }
-      btn.addEventListener('click', function () {
+      // O ícone (lua/sol) troca via CSS pelo [data-tema] — aqui só alterna e salva.
+      document.getElementById('btn-tema').addEventListener('click', function () {
         var novo = document.documentElement.dataset.tema === 'escuro' ? 'claro' : 'escuro';
         document.documentElement.dataset.tema = novo;
         localStorage.setItem('ti.tema', novo);
-        pintar();
       });
-      pintar();
     })();
   </script>
   <script src="app.js" defer></script>

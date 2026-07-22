@@ -90,23 +90,27 @@
   }
 
   function cartao(c) {
+    // Cartão do design Stitch: nº em mono discreta, título semibold, meta
+    // (solicitante · setor · idade), pill de prioridade e status como pill
+    // colorida (select estilizado, mantém a troca rápida de status).
     return `
       <div class="cartao${c.urgente && c.status !== 'finalizado' ? ' urgente' : ''}" data-id="${c.id}">
         <div class="c-info">
-          <div class="c-titulo">
-            ${c.urgente ? '<span class="pill pill-urgente">🚨 URGENTE</span>' : ''}
-            <span class="pill pri-${c.prioridade}">${c.prioridade === 'alta' ? '▲' : c.prioridade === 'media' ? '■' : '▼'} ${PRIO_LABEL[c.prioridade]}</span>
-            ${esc(c.titulo)}
-          </div>
-          <div class="c-sub">
+          <div class="c-topo">
             <span class="num">${esc(c.id)}</span>
-            · ${esc(c.solicitante.nome)} · ${esc(CAT_LABEL[c.categoria] || c.categoria)} · aberto ${diasDesde(c.criadoEm)}
+            ${c.urgente ? '<span class="pill pill-urgente">🚨 Urgente</span>' : ''}
+            <span class="c-idade">aberto ${diasDesde(c.criadoEm)}</span>
+          </div>
+          <div class="c-titulo">${esc(c.titulo)}</div>
+          <div class="c-sub">
+            ${esc(c.solicitante.nome)} · ${esc(CAT_LABEL[c.categoria] || c.categoria)}
             ${c.responsavel ? ' · atendido por ' + esc(c.responsavel) : ''}
           </div>
         </div>
         <div class="c-lado">
-          <span class="c-coment">💬 ${c.comentarios.length}</span>
-          <select class="status-sel" data-status="${c.id}">
+          <span class="c-coment" title="Observações">💬 ${c.comentarios.length}</span>
+          <span class="pill pri-${c.prioridade}">${c.prioridade === 'alta' ? '▲' : c.prioridade === 'media' ? '■' : '▼'} ${PRIO_LABEL[c.prioridade]}</span>
+          <select class="status-sel st-${c.status}" data-status="${c.id}">
             <option value="pendente"${c.status === 'pendente' ? ' selected' : ''}>Pendente</option>
             <option value="em_andamento"${c.status === 'em_andamento' ? ' selected' : ''}>Em andamento</option>
             <option value="finalizado"${c.status === 'finalizado' ? ' selected' : ''}>Finalizado</option>
