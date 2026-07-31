@@ -54,17 +54,28 @@
     </header>
 
     <main class="conteudo">
-      <div class="filtros">
-        <div class="seg" id="seg-status">
-          <button class="seg-btn active" data-f="fila">Fila de atendimento <span class="seg-c" id="c-fila">0</span></button>
-          <button class="seg-btn" data-f="pendente">Pendentes <span class="seg-c" id="c-pend">0</span></button>
-          <button class="seg-btn" data-f="em_andamento">Em andamento <span class="seg-c" id="c-and">0</span></button>
-          <button class="seg-btn" data-f="finalizado">Finalizados <span class="seg-c" id="c-fin">0</span></button>
-          <button class="seg-btn" data-f="todos">Todos <span class="seg-c" id="c-tod">0</span></button>
+      <nav class="abas" id="abas">
+        <button class="aba-btn active" data-aba="chamados">Chamados</button>
+        <button class="aba-btn" data-aba="homeoffice" id="aba-btn-ho" hidden>Home Office <span class="seg-c" id="c-ho">0</span></button>
+        <button class="aba-btn" data-aba="devolucao" id="aba-btn-dev">Devolução Home Office <span class="seg-c" id="c-dev">0</span></button>
+      </nav>
+
+      <section id="aba-chamados">
+        <div class="filtros">
+          <div class="seg" id="seg-status">
+            <button class="seg-btn active" data-f="fila">Fila de atendimento <span class="seg-c" id="c-fila">0</span></button>
+            <button class="seg-btn" data-f="pendente">Pendentes <span class="seg-c" id="c-pend">0</span></button>
+            <button class="seg-btn" data-f="em_andamento">Em andamento <span class="seg-c" id="c-and">0</span></button>
+            <button class="seg-btn" data-f="finalizado">Finalizados <span class="seg-c" id="c-fin">0</span></button>
+            <button class="seg-btn" data-f="todos">Todos <span class="seg-c" id="c-tod">0</span></button>
+          </div>
+          <input class="busca" id="busca" placeholder="Buscar por título, nº, solicitante…" autocomplete="off">
         </div>
-        <input class="busca" id="busca" placeholder="Buscar por título, nº, solicitante…" autocomplete="off">
-      </div>
-      <div id="lista"></div>
+        <div id="lista"></div>
+      </section>
+
+      <section id="aba-homeoffice" hidden><div id="ho-conteudo"></div></section>
+      <section id="aba-devolucao" hidden><div id="dev-conteudo"></div></section>
     </main>
   </div>
 
