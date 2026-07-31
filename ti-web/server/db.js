@@ -82,10 +82,8 @@ if (!db) {
 }
 if (!db.seq) db.seq = { usuario: db.usuarios.length, chamado: 0, notificacao: 0, comentario: 0 };
 if (!db.seq.comentario) db.seq.comentario = 0;
-if (!db.seq.homeoffice) db.seq.homeoffice = 0;
 if (!Array.isArray(db.sessoes)) db.sessoes = [];
 if (!Array.isArray(db.notificacoes)) db.notificacoes = [];
-if (!Array.isArray(db.homeoffice)) db.homeoffice = [];
 
 // ---------------------------------------------------------------------------
 // Persistência atômica + snapshots.
@@ -188,7 +186,6 @@ function encerrarSessao(token) {
 function novoIdChamado() { return 'TI-' + String(++db.seq.chamado).padStart(6, '0'); }
 function novoIdNotificacao() { return 'N-' + String(++db.seq.notificacao).padStart(6, '0'); }
 function novoIdComentario() { return 'C-' + String(++db.seq.comentario).padStart(6, '0'); }
-function novoIdHomeOffice() { return 'HO-' + String(++db.seq.homeoffice).padStart(4, '0'); }
 
 module.exports = {
   db,
@@ -208,5 +205,4 @@ module.exports = {
   novoIdChamado,
   novoIdNotificacao,
   novoIdComentario,
-  novoIdHomeOffice,
 };

@@ -12,9 +12,6 @@
     chamados: [],
     filtro: 'fila',
     busca: '',
-    aba: 'chamados',     // 'chamados' | 'homeoffice' | 'devolucao'
-    homeoffice: [],      // registros visíveis ao usuário
-    colaboradores: [],   // nomes para o líder escolher
     abertoId: null,      // chamado aberto no painel
     sse: null,
     atualizacaoPendente: false,
@@ -154,251 +151,6 @@
     estado.chamados = r.chamados;
     desenharLista();
     if (estado.usuario && estado.usuario.papel !== 'solicitante') atualizarSino();
-    carregarHomeOffice().catch(() => { /* aba segue com os dados anteriores */ });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Home Office — líderes registram a saída; o colaborador informa a devolução.
-  // ---------------------------------------------------------------------------
-  function gestorHO() {
-    const u = estado.usuario;
-    return !!u && (u.papel === 'ti' || u.papel === 'admin' || u.lider);
-  }
-  function hojeISO() {
-    const d = new Date();
-    const p = (n) => String(n).padStart(2, '0');
-    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
-  }
-  function dataCurta(iso) {
-    if (!iso) return '—';
-    const [a, m, dd] = iso.split('-');
-    return dd + '/' + m + '/' + a;
-  }
-  // Contador de devolução: dias até o prazo (datas locais, sem horário).
-  function prazoHO(r) {
-    if (r.status === 'devolvido') return { classe: 'pill-devolvido', texto: '✔ Devolvido' };
-    const [a, m, dd] = r.prazoDevolucao.split('-').map(Number);
-    const hoje = new Date();
-    const dias = Math.round((new Date(a, m - 1, dd) - new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())) / 86400000);
-    if (dias < 0) return { classe: 'pill-prazo-atrasado', texto: '⚠ atrasado ' + (dias === -1 ? 'há 1 dia' : 'há ' + (-dias) + ' dias'), dias };
-    if (dias === 0) return { classe: 'pill-prazo-hoje', texto: '⏳ devolver hoje', dias };
-    return { classe: 'pill-prazo-ok', texto: '⏳ ' + (dias === 1 ? '1 dia restante' : dias + ' dias restantes'), dias };
-  }
-  function ordenarHO(lista) {
-    // Em uso primeiro (mais atrasado/mais perto do prazo em cima); devolvidos por último.
-    return lista.slice().sort((a, b) => {
-      if ((a.status === 'devolvido') !== (b.status === 'devolvido')) return a.status === 'devolvido' ? 1 : -1;
-      if (a.status === 'devolvido') return a.criadoEm < b.criadoEm ? 1 : -1;
-      return a.prazoDevolucao < b.prazoDevolucao ? -1 : 1;
-    });
-  }
-  const meusHO = () => estado.homeoffice.filter((r) => r.colaborador.id === (estado.usuario && estado.usuario.id));
-
-  async function carregarHomeOffice() {
-    if (!estado.usuario) return;
-    const r = await api('/api/homeoffice');
-    estado.homeoffice = r.registros || [];
-    if (gestorHO() && !estado.colaboradores.length) {
-      try { estado.colaboradores = (await api('/api/homeoffice/colaboradores')).colaboradores || []; }
-      catch (e) { /* sem lista, o campo aceita texto livre */ }
-    }
-    const emUso = estado.homeoffice.filter((x) => x.status === 'em_uso');
-    $('c-ho').textContent = emUso.length;
-    $('c-dev').textContent = meusHO().filter((x) => x.status === 'em_uso').length;
-    if (estado.aba === 'homeoffice') desenharHomeOffice();
-    if (estado.aba === 'devolucao') desenharDevolucao();
-  }
-
-  function cartaoHO(r, acoes) {
-    const p = prazoHO(r);
-    const token = encodeURIComponent(localStorage.getItem(TOKEN_KEY) || '');
-    return `
-      <div class="cartao ho-cartao${p.classe === 'pill-prazo-atrasado' ? ' urgente' : ''}" data-ho="${esc(r.id)}">
-        <div class="c-info">
-          <div class="c-topo">
-            <span class="num">${esc(r.id)}</span>
-            <span class="pill ${p.classe}">${p.texto}</span>
-          </div>
-          <div class="c-titulo">${esc(r.colaborador.nome)}</div>
-          <div class="c-sub">Itens: ${esc(r.itens.join(', '))}</div>
-          <div class="c-sub">Levado em ${dataCurta(r.dataLevada)} · devolver até <strong>${dataCurta(r.prazoDevolucao)}</strong> · registrado por ${esc(r.registradoPor.nome)}</div>
-          ${r.devolucao ? `<div class="c-sub">Devolvido em ${dataFmt(r.devolucao.em)} por ${esc(r.devolucao.por.nome)} ·
-            <a class="ho-link" href="/api/homeoffice/${esc(r.id)}/imagem?token=${token}" target="_blank">ver foto</a> ·
-            chamado <a class="ho-link" href="#" data-chamado="${esc(r.devolucao.chamadoId)}">${esc(r.devolucao.chamadoId)}</a>
-            ${r.devolucao.observacao ? '<br>Obs.: ' + esc(r.devolucao.observacao) : ''}</div>` : ''}
-        </div>
-        <div class="c-lado">${acoes || ''}</div>
-      </div>`;
-  }
-
-  function ligarLinksHO(raiz) {
-    raiz.querySelectorAll('[data-chamado]').forEach((a) => {
-      a.addEventListener('click', (e) => { e.preventDefault(); abrirChamado(a.dataset.chamado); });
-    });
-  }
-
-  function listaHOHtml(lista) {
-    return lista.length
-      ? lista.map((r) => cartaoHO(r, r.status === 'em_uso'
-          ? `<button class="btn btn-mini" data-devolver="${esc(r.id)}">Registrar devolução</button>` : '')).join('')
-      : '<div class="vazio">Nenhum registro de Home Office ainda.</div>';
-  }
-  function ligarListaHO(raiz) {
-    raiz.querySelectorAll('[data-devolver]').forEach((b) => {
-      b.addEventListener('click', () => formDevolucao(b.dataset.devolver));
-    });
-    ligarLinksHO(raiz);
-  }
-
-  function desenharHomeOffice() {
-    const el = $('ho-conteudo');
-    if (!gestorHO()) { el.innerHTML = '<div class="vazio">Apenas líderes registram saídas para Home Office.</div>'; return; }
-    const lista = ordenarHO(estado.homeoffice);
-    // Formulário em preenchimento? Atualiza só a lista, sem apagar o que foi digitado.
-    const colabEl = $('ho-colab');
-    if (colabEl && ($('ho-colab').value.trim() || $('ho-itens').value.trim())) {
-      const listaEl = el.querySelector('.ho-lista');
-      if (listaEl) { listaEl.innerHTML = listaHOHtml(lista); ligarListaHO(listaEl); }
-      return;
-    }
-    el.innerHTML = `
-      <div class="ho-form">
-        <div class="secao" style="margin-top:0">Registrar saída para Home Office</div>
-        <div class="campo"><label>Colaborador</label>
-          <input id="ho-colab" list="ho-colabs" placeholder="Digite o nome ou escolha na lista…" autocomplete="off">
-          <datalist id="ho-colabs">${estado.colaboradores.map((c) => `<option value="${esc(c.nome)}">`).join('')}</datalist>
-        </div>
-        <div class="campo"><label>Itens levados (um por linha)</label>
-          <textarea id="ho-itens" rows="3" placeholder="Ex.:&#10;Notebook Dell + carregador&#10;Monitor 24&quot;"></textarea>
-        </div>
-        <div class="campo-linha">
-          <div class="campo"><label>Data em que está levando</label><input id="ho-data" type="date" value="${hojeISO()}"></div>
-          <div class="campo"><label>Prazo de devolução (automático)</label><input id="ho-prazo" disabled></div>
-        </div>
-        <div class="acoes"><button class="btn btn-verde" id="ho-registrar">Registrar Home Office</button></div>
-      </div>
-      <div class="secao">Equipamentos em Home Office</div>
-      <div class="ho-lista">${listaHOHtml(lista)}</div>`;
-
-    const atualizarPrazo = () => {
-      const v = $('ho-data').value;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { $('ho-prazo').value = ''; return; }
-      const [a, m, dd] = v.split('-').map(Number);
-      const p = new Date(a, m - 1, dd + 3);
-      $('ho-prazo').value = p.toLocaleDateString('pt-BR') + ' (3 dias)';
-    };
-    atualizarPrazo();
-    $('ho-data').addEventListener('change', atualizarPrazo);
-    $('ho-registrar').addEventListener('click', async () => {
-      const nome = $('ho-colab').value.trim();
-      const itens = $('ho-itens').value;
-      if (!nome) { aviso('Informe o colaborador.', 'erro'); $('ho-colab').focus(); return; }
-      if (!itens.trim()) { aviso('Informe os itens levados.', 'erro'); $('ho-itens').focus(); return; }
-      const conhecido = estado.colaboradores.find((c) => c.nome.toLowerCase() === nome.toLowerCase());
-      try {
-        await api('/api/homeoffice', { method: 'POST', body: {
-          colaboradorId: conhecido ? conhecido.id : undefined,
-          colaboradorNome: nome,
-          itens,
-          dataLevada: $('ho-data').value,
-        } });
-        aviso('Home Office registrado — devolução em até 3 dias.');
-        $('ho-colab').value = ''; $('ho-itens').value = '';
-        await carregarHomeOffice();
-        desenharHomeOffice();
-      } catch (e) { aviso(e.message, 'erro'); }
-    });
-    ligarListaHO(el);
-  }
-
-  function desenharDevolucao() {
-    const el = $('dev-conteudo');
-    const meus = ordenarHO(meusHO());
-    const emUso = meus.filter((r) => r.status === 'em_uso');
-    const devolvidos = meus.filter((r) => r.status === 'devolvido');
-    el.innerHTML = `
-      <div class="desc" style="margin-bottom:16px">Aqui aparecem os equipamentos registrados no seu nome para Home Office.
-      Ao devolver, clique em <strong>Informar devolução</strong>, anexe uma foto dos aparelhos e confirme — um chamado é aberto para a TI conferir.</div>
-      ${emUso.length
-        ? emUso.map((r) => cartaoHO(r, `<button class="btn btn-primario btn-mini" data-devolver="${esc(r.id)}">Informar devolução</button>`)).join('')
-        : '<div class="vazio">Nenhum equipamento de Home Office pendente no seu nome. 🎉</div>'}
-      ${devolvidos.length ? '<div class="secao">Devoluções anteriores</div>' + devolvidos.map((r) => cartaoHO(r, '')).join('') : ''}`;
-    el.querySelectorAll('[data-devolver]').forEach((b) => {
-      b.addEventListener('click', () => formDevolucao(b.dataset.devolver));
-    });
-    ligarLinksHO(el);
-  }
-
-  // Reduz a foto no navegador (máx. 1600 px, JPEG) — evita corpo gigante.
-  function lerImagemComprimida(file) {
-    return new Promise((resolve, reject) => {
-      if (!file) return reject(new Error('Anexe a foto dos aparelhos.'));
-      if (!/^image\//.test(file.type)) return reject(new Error('O anexo precisa ser uma imagem.'));
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        const escala = Math.min(1, 1600 / Math.max(img.width, img.height));
-        const cv = document.createElement('canvas');
-        cv.width = Math.max(1, Math.round(img.width * escala));
-        cv.height = Math.max(1, Math.round(img.height * escala));
-        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-        resolve(cv.toDataURL('image/jpeg', 0.85));
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Não foi possível ler a imagem.')); };
-      img.src = url;
-    });
-  }
-
-  function formDevolucao(id) {
-    const r = estado.homeoffice.find((x) => x.id === id);
-    if (!r) return;
-    const corpo = abrirPainel('Devolução · ' + r.id + ' — ' + r.colaborador.nome);
-    corpo.innerHTML = `
-      <div class="desc">Itens levados em ${dataCurta(r.dataLevada)}:<br>• ${r.itens.map(esc).join('<br>• ')}</div>
-      <div class="campo" style="margin-top:12px"><label>Foto dos aparelhos devolvidos *</label>
-        <input id="dv-foto" type="file" accept="image/*" capture="environment">
-      </div>
-      <img id="dv-preview" class="ho-preview" alt="" hidden>
-      <div class="campo"><label>Observação (opcional)</label>
-        <textarea id="dv-obs" rows="3" placeholder="Ex.: devolvido completo, sem avarias…"></textarea>
-      </div>
-      <div class="acoes">
-        <button class="btn" id="dv-cancelar">Cancelar</button>
-        <button class="btn btn-verde" id="dv-enviar">Confirmar devolução</button>
-      </div>`;
-    let imagem = null;
-    $('dv-foto').addEventListener('change', async () => {
-      try {
-        imagem = await lerImagemComprimida($('dv-foto').files[0]);
-        $('dv-preview').src = imagem;
-        $('dv-preview').hidden = false;
-      } catch (e) { imagem = null; $('dv-preview').hidden = true; aviso(e.message, 'erro'); }
-    });
-    $('dv-cancelar').addEventListener('click', fecharPainel);
-    $('dv-enviar').addEventListener('click', async () => {
-      if (!imagem) { aviso('Anexe a foto dos aparelhos.', 'erro'); return; }
-      const btn = $('dv-enviar');
-      btn.disabled = true;
-      try {
-        const resp = await api('/api/homeoffice/' + r.id + '/devolucao', { method: 'POST', body: {
-          imagem, observacao: $('dv-obs').value.trim(),
-        } });
-        aviso('Devolução registrada — chamado ' + resp.chamado.id + ' aberto para a TI conferir.');
-        fecharPainel();
-        await carregar();
-      } catch (e) { btn.disabled = false; aviso(e.message, 'erro'); }
-    });
-  }
-
-  function trocarAba(aba) {
-    estado.aba = aba;
-    $('abas').querySelectorAll('.aba-btn').forEach((b) => b.classList.toggle('active', b.dataset.aba === aba));
-    $('aba-chamados').hidden = aba !== 'chamados';
-    $('aba-homeoffice').hidden = aba !== 'homeoffice';
-    $('aba-devolucao').hidden = aba !== 'devolucao';
-    if (aba === 'homeoffice') desenharHomeOffice();
-    if (aba === 'devolucao') desenharDevolucao();
   }
 
   // ---------------------------------------------------------------------------
@@ -618,10 +370,9 @@
     corpo.innerHTML = `
       ${r.usuarios.map((u) => `
         <div class="coment">
-          <div class="coment-quem"><strong>${esc(u.nome)}</strong> · <span class="num">${esc(u.login)}</span> · ${esc(u.papel)}${u.lider ? ' · <span class="pill pill-lider">⭐ líder</span>' : ''}</div>
+          <div class="coment-quem"><strong>${esc(u.nome)}</strong> · <span class="num">${esc(u.login)}</span> · ${esc(u.papel)}</div>
           <div class="acoes" style="margin-top:6px">
             <button class="btn btn-mini" data-senha="${esc(u.id)}">Trocar senha</button>
-            <button class="btn btn-mini" data-lider="${esc(u.id)}" data-lider-v="${u.lider ? '0' : '1'}">${u.lider ? 'Remover líder' : 'Tornar líder'}</button>
             <button class="btn btn-mini" data-remover="${esc(u.id)}" style="color:var(--perigo)">Remover</button>
           </div>
         </div>`).join('')}
@@ -638,27 +389,16 @@
           <option value="admin">Admin</option>
         </select>
       </div>
-      <label class="chk"><input type="checkbox" id="u-lider"> ⭐ Líder (registra saídas para Home Office)</label>
       <div class="acoes"><button class="btn btn-verde" id="u-criar">Cadastrar usuário</button></div>`;
     $('u-criar').addEventListener('click', async () => {
       try {
         await api('/api/usuarios', { method: 'POST', body: {
           nome: $('u-nome').value.trim(), login: $('u-login').value.trim(),
           senha: $('u-senha').value, papel: $('u-papel').value,
-          lider: $('u-lider').checked,
         } });
         aviso('Usuário cadastrado.');
         abrirUsuarios();
       } catch (e) { aviso(e.message, 'erro'); }
-    });
-    corpo.querySelectorAll('[data-lider]').forEach((b) => {
-      b.addEventListener('click', async () => {
-        try {
-          await api('/api/usuarios/' + b.dataset.lider, { method: 'PUT', body: { lider: b.dataset.liderV === '1' } });
-          aviso(b.dataset.liderV === '1' ? 'Usuário agora é líder.' : 'Usuário deixou de ser líder.');
-          abrirUsuarios();
-        } catch (e) { aviso(e.message, 'erro'); }
-      });
     });
     corpo.querySelectorAll('[data-senha]').forEach((b) => {
       b.addEventListener('click', async () => {
@@ -718,11 +458,9 @@
 
   async function entrarNoApp(usuario) {
     estado.usuario = usuario;
-    $('quem-nome').textContent = usuario.nome + (usuario.lider ? ' ⭐' : '');
+    $('quem-nome').textContent = usuario.nome;
     $('btn-usuarios').hidden = usuario.papel !== 'admin';
     $('btn-sino').style.display = usuario.papel === 'solicitante' ? 'none' : '';
-    $('aba-btn-ho').hidden = !gestorHO();
-    trocarAba('chamados');
     $('login').hidden = true;
     $('app').hidden = false;
     conectarSSE();
@@ -755,9 +493,6 @@
     $('btn-usuarios').addEventListener('click', abrirUsuarios);
     $('painel-fechar').addEventListener('click', fecharPainel);
     $('painel-fundo').addEventListener('click', fecharPainel);
-    $('abas').querySelectorAll('.aba-btn').forEach((b) => {
-      b.addEventListener('click', () => trocarAba(b.dataset.aba));
-    });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharPainel(); });
     $('lg-entrar').addEventListener('click', tentarLogin);
     ['lg-login', 'lg-senha'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') tentarLogin(); }));

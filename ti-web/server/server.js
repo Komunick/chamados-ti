@@ -22,8 +22,7 @@ const d = require('./db');
 const PORT = parseInt(process.env.PORT, 10) || 8085;
 const HOST = process.env.HOST || '0.0.0.0';
 const ROOT = path.join(__dirname, '..'); // pasta ti-web
-// 8 MB: a foto da devolução de Home Office viaja em base64 no corpo JSON.
-const BODY_LIMIT = parseInt(process.env.TI_BODY_LIMIT, 10) || 8 * 1024 * 1024;
+const BODY_LIMIT = parseInt(process.env.TI_BODY_LIMIT, 10) || 2 * 1024 * 1024;
 
 const STATUS = ['pendente', 'em_andamento', 'finalizado'];
 const PRIORIDADES = ['baixa', 'media', 'alta'];
@@ -94,11 +93,7 @@ function txt(v, max) {
   return String(v).trim().slice(0, max || 200);
 }
 function publicoUsuario(u) {
-  return { id: u.id, nome: u.nome, login: u.login, papel: u.papel, lider: !!u.lider, criadoEm: u.criadoEm };
-}
-// Home Office: quem pode registrar saídas — líderes marcados pelo admin, TI e admin.
-function gestorHomeOffice(u) {
-  return !!u && (u.papel === 'ti' || u.papel === 'admin' || !!u.lider);
+  return { id: u.id, nome: u.nome, login: u.login, papel: u.papel, criadoEm: u.criadoEm };
 }
 function acharChamado(id) {
   return d.db.chamados.find((c) => c.id === id) || null;
@@ -222,7 +217,6 @@ rota('POST', '/api/usuarios', ['admin'], (ctx) => {
   if (!PAPEIS.includes(papel)) return erro(ctx.res, 400, 'Papel inválido.');
   if (d.db.usuarios.some((u) => u.login === login)) return erro(ctx.res, 409, 'Já existe um usuário com esse login.');
   const u = d.criarUsuarioObj(nome, login, senha, papel);
-  u.lider = !!ctx.body.lider;
   d.db.usuarios.push(u);
   d.flush();
   notifyChange('usuarios');
@@ -246,7 +240,6 @@ rota('PUT', '/api/usuarios/:id', ['admin'], (ctx) => {
     u.sal = d.novoSal();
     u.senhaHash = d.hashSenha(String(ctx.body.novaSenha), u.sal);
   }
-  if (ctx.body.lider !== undefined) u.lider = !!ctx.body.lider;
   d.flush();
   notifyChange('usuarios');
   sendJson(ctx.res, 200, { usuario: publicoUsuario(u) });
@@ -450,162 +443,6 @@ rota('POST', '/api/notificacoes/:id/reconhecer', ['ti', 'admin'], (ctx) => {
     notifyChange('notificacoes');
   }
   sendJson(ctx.res, 200, { notificacao: n });
-});
-
-// ---- home office -------------------------------------------------------------
-// Líderes registram os equipamentos que um colaborador leva para casa; o
-// sistema abre um prazo de 3 dias e o colaborador informa a devolução (com
-// foto) pela aba própria — o que também abre um chamado para a TI conferir.
-const HO_ANEXOS_DIR = path.join(d.DATA_DIR, 'ho-anexos');
-fs.mkdirSync(HO_ANEXOS_DIR, { recursive: true });
-const HO_PRAZO_DIAS = 3;
-const HO_IMG_MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
-
-function acharHO(id) {
-  return d.db.homeoffice.find((r) => r.id === id) || null;
-}
-function somarDias(iso, dias) {
-  const [a, m, dd] = iso.split('-').map(Number);
-  const dt = new Date(a, m - 1, dd + dias);
-  const p = (n) => String(n).padStart(2, '0');
-  return dt.getFullYear() + '-' + p(dt.getMonth() + 1) + '-' + p(dt.getDate());
-}
-
-// Nomes para o líder escolher na lista (todos os usuários, menos contas de serviço).
-rota('GET', '/api/homeoffice/colaboradores', null, (ctx) => {
-  if (!gestorHomeOffice(ctx.usuario)) return erro(ctx.res, 403, 'Apenas líderes registram Home Office.');
-  const lista = d.db.usuarios
-    .filter((u) => u.login !== 'admin' && u.login !== 'claude')
-    .map((u) => ({ id: u.id, nome: u.nome }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  sendJson(ctx.res, 200, { colaboradores: lista });
-});
-
-rota('GET', '/api/homeoffice', null, (ctx) => {
-  let lista = d.db.homeoffice;
-  if (!gestorHomeOffice(ctx.usuario)) {
-    lista = lista.filter((r) => r.colaborador.id === ctx.usuario.id);
-  }
-  lista = lista.slice().sort((a, b) => (a.criadoEm < b.criadoEm ? 1 : -1));
-  sendJson(ctx.res, 200, { registros: lista, gestor: gestorHomeOffice(ctx.usuario) });
-});
-
-rota('POST', '/api/homeoffice', null, (ctx) => {
-  if (!gestorHomeOffice(ctx.usuario)) return erro(ctx.res, 403, 'Apenas líderes registram Home Office.');
-  const b = ctx.body;
-  let colaborador = null;
-  if (b.colaboradorId) {
-    const u = d.db.usuarios.find((x) => x.id === b.colaboradorId);
-    if (!u) return erro(ctx.res, 400, 'Colaborador não encontrado.');
-    colaborador = { id: u.id, nome: u.nome };
-  } else {
-    const nome = txt(b.colaboradorNome, 80);
-    if (!nome) return erro(ctx.res, 400, 'Informe o colaborador.');
-    // Se o nome digitado bate com um usuário, vincula (permite a devolução por ele).
-    const u = d.db.usuarios.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
-    colaborador = { id: u ? u.id : null, nome: u ? u.nome : nome };
-  }
-  const itens = (Array.isArray(b.itens) ? b.itens : String(b.itens || '').split('\n'))
-    .map((i) => txt(i, 120)).filter(Boolean).slice(0, 20);
-  if (!itens.length) return erro(ctx.res, 400, 'Informe ao menos um item levado.');
-  const dataLevada = /^\d{4}-\d{2}-\d{2}$/.test(String(b.dataLevada || '')) ? b.dataLevada : null;
-  if (!dataLevada) return erro(ctx.res, 400, 'Informe a data em que os itens foram levados.');
-
-  const registro = {
-    id: d.novoIdHomeOffice(),
-    criadoEm: d.agora(),
-    registradoPor: { id: ctx.usuario.id, nome: ctx.usuario.nome },
-    colaborador,
-    itens,
-    dataLevada,
-    prazoDevolucao: somarDias(dataLevada, HO_PRAZO_DIAS),
-    status: 'em_uso', // 'em_uso' | 'devolvido' (atraso é derivado do prazo)
-    devolucao: null,
-  };
-  d.db.homeoffice.push(registro);
-  d.flush();
-  notifyChange('homeoffice');
-  sendJson(ctx.res, 200, { registro });
-});
-
-rota('POST', '/api/homeoffice/:id/devolucao', null, (ctx) => {
-  const reg = acharHO(ctx.params.id);
-  if (!reg) return erro(ctx.res, 404, 'Registro não encontrado.');
-  if (reg.status === 'devolvido') return erro(ctx.res, 400, 'Este registro já foi devolvido.');
-  const ehColaborador = reg.colaborador.id === ctx.usuario.id;
-  if (!ehColaborador && !gestorHomeOffice(ctx.usuario)) {
-    return erro(ctx.res, 403, 'Somente o colaborador citado (ou um líder) informa a devolução.');
-  }
-  const m = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(ctx.body.imagem || ''));
-  if (!m) return erro(ctx.res, 400, 'Anexe a foto dos aparelhos devolvidos.');
-  const buf = Buffer.from(m[2], 'base64');
-  if (!buf.length || buf.length > 6 * 1024 * 1024) return erro(ctx.res, 400, 'A imagem deve ter até 6 MB.');
-  const ext = m[1] === 'png' ? 'png' : m[1] === 'webp' ? 'webp' : 'jpg';
-  const arquivo = reg.id + '-' + Date.now() + '.' + ext;
-  fs.writeFileSync(path.join(HO_ANEXOS_DIR, arquivo), buf);
-
-  const observacao = txt(ctx.body.observacao, 1000);
-  const chamado = {
-    id: d.novoIdChamado(),
-    criadoEm: d.agora(),
-    atualizadoEm: d.agora(),
-    solicitante: { id: ctx.usuario.id, nome: ctx.usuario.nome },
-    titulo: 'Devolução Home Office ' + reg.id + ' — ' + reg.colaborador.nome,
-    descricao: 'Devolução dos aparelhos levados para Home Office em ' + reg.dataLevada + ':\n- ' +
-      reg.itens.join('\n- ') + (observacao ? '\n\nObservação: ' + observacao : '') +
-      '\n\nFoto anexada no registro ' + reg.id + ' (aba Home Office).',
-    categoria: 'equipamento',
-    prioridade: 'media',
-    urgente: false,
-    status: 'pendente',
-    responsavel: null,
-    finalizadoEm: null,
-    comentarios: [],
-    historico: [],
-  };
-  historico(chamado, ctx.usuario, 'Chamado aberto.', 'Devolução de equipamentos de Home Office (' + reg.id + ').');
-  d.db.chamados.push(chamado);
-  criarNotificacao('novo_chamado', chamado,
-    'Devolução Home Office — ' + chamado.id,
-    ctx.usuario.nome + ' informou a devolução dos aparelhos (' + reg.id + '): ' + reg.itens.join(', ').slice(0, 140));
-
-  reg.status = 'devolvido';
-  reg.devolucao = {
-    em: d.agora(),
-    por: { id: ctx.usuario.id, nome: ctx.usuario.nome },
-    chamadoId: chamado.id,
-    imagem: arquivo,
-    observacao: observacao || null,
-  };
-  d.flush();
-  notifyChange('homeoffice');
-  notifyChange('chamados');
-  sendJson(ctx.res, 200, { registro: reg, chamado });
-});
-
-// A foto é servida daqui (ti-data fica fora da pasta estática); o <a>/<img>
-// autentica pelo ?token=, que o despacho já aceita.
-rota('GET', '/api/homeoffice/:id/imagem', null, (ctx) => {
-  const reg = acharHO(ctx.params.id);
-  if (!reg || !reg.devolucao || !reg.devolucao.imagem) return erro(ctx.res, 404, 'Sem imagem para este registro.');
-  const arquivo = path.basename(reg.devolucao.imagem);
-  fs.readFile(path.join(HO_ANEXOS_DIR, arquivo), (err, dados) => {
-    if (err) return erro(ctx.res, 404, 'Imagem não encontrada no servidor.');
-    const ext = path.extname(arquivo).slice(1).toLowerCase();
-    send(ctx.res, 200, dados, { 'Content-Type': HO_IMG_MIME[ext] || 'application/octet-stream' });
-  });
-});
-
-rota('DELETE', '/api/homeoffice/:id', ['admin'], (ctx) => {
-  const reg = acharHO(ctx.params.id);
-  if (!reg) return erro(ctx.res, 404, 'Registro não encontrado.');
-  if (reg.devolucao && reg.devolucao.imagem) {
-    try { fs.unlinkSync(path.join(HO_ANEXOS_DIR, path.basename(reg.devolucao.imagem))); } catch (e) { /* ignore */ }
-  }
-  d.db.homeoffice = d.db.homeoffice.filter((r) => r.id !== reg.id);
-  d.flush();
-  notifyChange('homeoffice');
-  sendJson(ctx.res, 200, { ok: true });
 });
 
 // ---- backup ------------------------------------------------------------------
