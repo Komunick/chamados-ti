@@ -401,6 +401,43 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .login-btn { width: 100%; margin-top: 8px; padding: 11px; font-size: 14px; }
 .login-erro { background: var(--perigo-claro); color: var(--perigo); border-radius: var(--raio-sm); padding: 9px 12px; font-size: 12.5px; font-weight: 600; margin-bottom: 10px; text-align: left; }
 
+/* ---------- Abas (Chamados · Home Office · Devolução) ---------- */
+.abas {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px;
+  border-bottom: 2px solid var(--linha); padding-bottom: 0;
+}
+.aba-btn {
+  border: none; background: transparent; padding: 10px 16px 12px;
+  font-weight: 700; font-size: 13.5px; color: var(--cinza);
+  display: inline-flex; gap: 8px; align-items: center;
+  border-bottom: 3px solid transparent; margin-bottom: -2px;
+  transition: color .12s, border-color .12s;
+}
+.aba-btn:hover { color: var(--texto); }
+.aba-btn.active { color: var(--verde); border-bottom-color: var(--ouro); }
+.aba-btn .seg-c { background: var(--verde-claro); color: var(--verde); }
+.aba-btn.active .seg-c { background: var(--ouro); color: var(--ouro-texto); }
+
+/* ---------- Home Office ---------- */
+.ho-form {
+  background: var(--branco); border: 1px solid var(--linha); border-radius: var(--raio);
+  box-shadow: var(--sombra); padding: 18px 20px; margin-bottom: 4px;
+  border-top: 3px solid var(--ouro);
+}
+.ho-lista { display: flex; flex-direction: column; gap: 10px; }
+.ho-cartao { cursor: default; }
+.ho-cartao:hover { transform: none; border-color: var(--linha); box-shadow: var(--sombra); }
+.pill-prazo-ok { background: var(--verde-claro); color: var(--ok); }
+.pill-prazo-hoje { background: var(--alerta-claro); color: var(--alerta); }
+.pill-prazo-atrasado { background: var(--perigo); color: #fff; }
+.pill-devolvido { background: var(--azul-claro); color: var(--azul); }
+.pill-lider { background: var(--alerta-claro); color: var(--alerta); }
+.ho-link { color: var(--verde); font-weight: 700; text-decoration: underline; }
+.ho-preview {
+  max-width: 100%; max-height: 260px; border-radius: var(--raio-sm);
+  border: 1px solid var(--linha-forte); margin: 0 0 12px; display: block;
+}
+
 /* ---------- Responsivo ---------- */
 @media (max-width: 860px) {
   .cartao { flex-wrap: wrap; align-items: flex-start; }
