@@ -24,6 +24,10 @@
   const PRIO_LABEL = { baixa: 'Baixa', media: 'Média', alta: 'Alta' };
   const PRIO_PESO = { alta: 3, media: 2, baixa: 1 };
   const CAT_LABEL = { sistema: 'Sistema / software', equipamento: 'Equipamento', rede: 'Rede / internet', acesso: 'Acesso / senha', impressora: 'Impressora', outro: 'Outro' };
+  // Regras dos itens do Home Office — regras-ho.js, o mesmo arquivo que o
+  // servidor usa. Se por algum motivo não carregar, a tela deixa passar e o
+  // servidor barra (lá é que a regra vale de fato).
+  const RegrasHO = window.RegrasHO || { REGRAS: [], validarItens: () => ({ ok: true, problemas: [] }) };
 
   function esc(v) {
     if (v == null) return '';
@@ -193,6 +197,48 @@
     });
   }
   const meusHO = () => estado.homeoffice.filter((r) => r.colaborador.id === (estado.usuario && estado.usuario.id));
+  const colaboradorPorNome = (nome) => {
+    const n = String(nome || '').trim().toLowerCase();
+    return n ? (estado.colaboradores.find((c) => c.nome.toLowerCase() === n) || null) : null;
+  };
+
+  /*
+   * Confere o formulário contra as regras e pinta os avisos na tela: etiqueta
+   * do colaborador (pode ou não levar celular) e lista do que está barrado.
+   * Devolve o resultado para o botão decidir — o servidor confere de novo.
+   */
+  function conferirHO() {
+    const nome = $('ho-colab') ? $('ho-colab').value.trim() : '';
+    const conhecido = colaboradorPorNome(nome);
+    const lider = !!(conhecido && conhecido.lider);
+
+    const tag = $('ho-colab-tag');
+    if (tag) {
+      tag.hidden = !nome;
+      tag.className = 'ho-tag' + (nome && lider ? ' ho-tag-lider' : '');
+      tag.innerHTML = !nome ? '' : (lider
+        ? '⭐ Líder — pode levar celular.'
+        : (conhecido
+          ? esc(conhecido.nome) + ' não é líder — <strong>não pode levar celular</strong>.'
+          : 'Nome fora da lista de usuários — sem confirmação de liderança, <strong>celular não é liberado</strong>.'));
+    }
+
+    const v = RegrasHO.validarItens($('ho-itens') ? $('ho-itens').value : '', {
+      colaboradorLider: lider,
+      colaboradorConhecido: !!conhecido,
+      colaboradorNome: conhecido ? conhecido.nome : nome,
+    });
+    const alerta = $('ho-alerta');
+    if (alerta) {
+      alerta.hidden = v.ok;
+      alerta.innerHTML = v.ok ? ''
+        : '<strong>Não pode sair da empresa:</strong><ul>' +
+          v.problemas.map((p) => '<li>' + esc(p.mensagem) + '</li>').join('') + '</ul>';
+    }
+    const btn = $('ho-registrar');
+    if (btn) btn.disabled = !v.ok;
+    return v;
+  }
 
   async function carregarHomeOffice() {
     if (!estado.usuario) return;
@@ -220,8 +266,9 @@
             <span class="pill ${p.classe}">${p.texto}</span>
           </div>
           <div class="c-titulo">${esc(r.colaborador.nome)}</div>
-          <div class="c-sub">Itens: ${esc(r.itens.join(', '))}</div>
-          <div class="c-sub">Levado em ${dataCurta(r.dataLevada)} · devolver até <strong>${dataCurta(r.prazoDevolucao)}</strong> · registrado por ${esc(r.registradoPor.nome)}</div>
+          <div class="c-sub">Itens autorizados: ${esc(r.itens.join(', '))}</div>
+          <div class="c-sub">Levado em ${dataCurta(r.dataLevada)} · devolver até <strong>${dataCurta(r.prazoDevolucao)}</strong> · registrado por ${esc(r.registradoPor.nome)}
+            ${r.chamadoId ? ` · chamado <a class="ho-link" href="#" data-chamado="${esc(r.chamadoId)}">${esc(r.chamadoId)}</a>` : ''}</div>
           ${r.devolucao ? `<div class="c-sub">Devolvido em ${dataFmt(r.devolucao.em)} por ${esc(r.devolucao.por.nome)} ·
             <a class="ho-link" href="/api/homeoffice/${esc(r.id)}/imagem?token=${token}" target="_blank">ver foto</a> ·
             chamado <a class="ho-link" href="#" data-chamado="${esc(r.devolucao.chamadoId)}">${esc(r.devolucao.chamadoId)}</a>
@@ -263,19 +310,33 @@
     }
     el.innerHTML = `
       <div class="ho-form">
-        <div class="secao" style="margin-top:0">Registrar saída para Home Office</div>
+        <div class="secao" style="margin-top:0">Abrir chamado de Home Office</div>
+        <div class="desc desc-texto" style="margin-bottom:14px">Informe o colaborador e o que ele irá levar. O chamado é aberto no
+        seu nome, a TI é avisada e o prazo de devolução é de <strong>3 dias</strong>.</div>
+        <div class="ho-regras">
+          <div class="ho-regras-titulo">⚠ Regras — leia antes de registrar</div>
+          <ul>
+            <li><strong>É proibido levar monitor</strong> — qualquer tipo, marca ou tamanho, em nenhuma hipótese.</li>
+            <li><strong>Celular só pode ser levado por líder</strong> — colaborador que não é líder não leva celular.</li>
+            <li><strong>Nada além do que estiver neste chamado</strong> — item que não for escrito abaixo é proibido sair.</li>
+          </ul>
+        </div>
         <div class="campo"><label>Colaborador</label>
           <input id="ho-colab" list="ho-colabs" placeholder="Digite o nome ou escolha na lista…" autocomplete="off">
           <datalist id="ho-colabs">${estado.colaboradores.map((c) => `<option value="${esc(c.nome)}">`).join('')}</datalist>
+          <div class="ho-tag" id="ho-colab-tag" hidden></div>
         </div>
-        <div class="campo"><label>Itens levados (um por linha)</label>
-          <textarea id="ho-itens" rows="3" placeholder="Ex.:&#10;Notebook Dell + carregador&#10;Monitor 24&quot;"></textarea>
+        <div class="campo"><label>Itens que ele irá levar (um por linha)</label>
+          <textarea id="ho-itens" rows="3" placeholder="Ex.:&#10;Notebook Dell + carregador&#10;Mouse sem fio&#10;Headset"></textarea>
         </div>
+        <div class="ho-alerta" id="ho-alerta" hidden></div>
         <div class="campo-linha">
           <div class="campo"><label>Data em que está levando</label><input id="ho-data" type="date" value="${hojeISO()}"></div>
           <div class="campo"><label>Prazo de devolução (automático)</label><input id="ho-prazo" disabled></div>
         </div>
-        <div class="acoes"><button class="btn btn-verde" id="ho-registrar">Registrar Home Office</button></div>
+        <label class="chk chk-termo"><input type="checkbox" id="ho-termo">
+          <span>Confirmo que o colaborador levará <strong>somente</strong> os itens listados acima e está ciente das regras.</span></label>
+        <div class="acoes"><button class="btn btn-verde" id="ho-registrar">Abrir chamado de Home Office</button></div>
       </div>
       <div class="secao">Equipamentos em Home Office</div>
       <div class="ho-lista">${listaHOHtml(lista)}</div>`;
@@ -289,22 +350,31 @@
     };
     atualizarPrazo();
     $('ho-data').addEventListener('change', atualizarPrazo);
+    $('ho-colab').addEventListener('input', conferirHO);
+    $('ho-colab').addEventListener('change', conferirHO);
+    $('ho-itens').addEventListener('input', conferirHO);
     $('ho-registrar').addEventListener('click', async () => {
       const nome = $('ho-colab').value.trim();
       const itens = $('ho-itens').value;
       if (!nome) { aviso('Informe o colaborador.', 'erro'); $('ho-colab').focus(); return; }
-      if (!itens.trim()) { aviso('Informe os itens levados.', 'erro'); $('ho-itens').focus(); return; }
-      const conhecido = estado.colaboradores.find((c) => c.nome.toLowerCase() === nome.toLowerCase());
+      if (!itens.trim()) { aviso('Informe os itens que ele irá levar.', 'erro'); $('ho-itens').focus(); return; }
+      // O servidor confere de novo; aqui é só para o líder não descobrir depois.
+      const conferencia = conferirHO();
+      if (!conferencia.ok) { aviso(conferencia.problemas[0].mensagem, 'erro'); $('ho-itens').focus(); return; }
+      if (!$('ho-termo').checked) { aviso('Confirme que ele levará somente os itens listados.', 'erro'); return; }
+      const conhecido = colaboradorPorNome(nome);
       try {
-        await api('/api/homeoffice', { method: 'POST', body: {
+        const resp = await api('/api/homeoffice', { method: 'POST', body: {
           colaboradorId: conhecido ? conhecido.id : undefined,
           colaboradorNome: nome,
           itens,
           dataLevada: $('ho-data').value,
         } });
-        aviso('Home Office registrado — devolução em até 3 dias.');
-        $('ho-colab').value = ''; $('ho-itens').value = '';
-        await carregarHomeOffice();
+        aviso(resp && resp.chamado
+          ? 'Chamado ' + resp.chamado.id + ' aberto — devolução em até 3 dias.'
+          : 'Home Office registrado — devolução em até 3 dias.');
+        $('ho-colab').value = ''; $('ho-itens').value = ''; $('ho-termo').checked = false;
+        await carregar();
         desenharHomeOffice();
       } catch (e) { aviso(e.message, 'erro'); }
     });
@@ -317,8 +387,10 @@
     const emUso = meus.filter((r) => r.status === 'em_uso');
     const devolvidos = meus.filter((r) => r.status === 'devolvido');
     el.innerHTML = `
-      <div class="desc" style="margin-bottom:16px">Aqui aparecem os equipamentos registrados no seu nome para Home Office.
-      Ao devolver, clique em <strong>Informar devolução</strong>, anexe uma foto dos aparelhos e confirme — um chamado é aberto para a TI conferir.</div>
+      <div class="desc desc-texto" style="margin-bottom:16px">Aqui aparecem os equipamentos registrados no seu nome para Home Office.
+      Ao devolver, clique em <strong>Informar devolução</strong>, anexe uma foto dos aparelhos e confirme — a TI confere no
+      mesmo chamado que o seu líder abriu. Devolva <strong>exatamente</strong> os itens da lista: levar ou trazer qualquer
+      coisa fora do que está no chamado não é permitido.</div>
       ${emUso.length
         ? emUso.map((r) => cartaoHO(r, `<button class="btn btn-primario btn-mini" data-devolver="${esc(r.id)}">Informar devolução</button>`)).join('')
         : '<div class="vazio">Nenhum equipamento de Home Office pendente no seu nome. 🎉</div>'}
@@ -355,7 +427,7 @@
     if (!r) return;
     const corpo = abrirPainel('Devolução · ' + r.id + ' — ' + r.colaborador.nome);
     corpo.innerHTML = `
-      <div class="desc">Itens levados em ${dataCurta(r.dataLevada)}:<br>• ${r.itens.map(esc).join('<br>• ')}</div>
+      <div class="desc">Itens autorizados na saída de ${dataCurta(r.dataLevada)} — devolva todos:<br>• ${r.itens.map(esc).join('<br>• ')}</div>
       <div class="campo" style="margin-top:12px"><label>Foto dos aparelhos devolvidos *</label>
         <input id="dv-foto" type="file" accept="image/*" capture="environment">
       </div>

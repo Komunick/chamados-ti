@@ -323,6 +323,9 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
   white-space: pre-wrap; background: var(--fundo); border: 1px solid var(--linha);
   border-radius: 10px; padding: 12px 14px; font-size: 13.5px;
 }
+/* Texto de apoio escrito no HTML (não é descrição de chamado): quebra normal,
+   senão o pre-wrap do .desc mostra a indentação do código na tela. */
+.desc-texto { white-space: normal; }
 .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 10px; align-items: center; }
 /* Rótulos de grupo caixa-alta 11px espaçada, com fio */
 .secao {
@@ -433,6 +436,35 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .pill-devolvido { background: var(--azul-claro); color: var(--azul); }
 .pill-lider { background: var(--alerta-claro); color: var(--alerta); }
 .ho-link { color: var(--verde); font-weight: 700; text-decoration: underline; }
+/* Quadro das regras (monitor nunca, celular só de líder, nada fora do chamado) */
+.ho-regras {
+  background: var(--alerta-claro); border: 1px solid var(--alerta);
+  border-radius: var(--raio-sm); padding: 12px 14px; margin-bottom: 16px;
+}
+.ho-regras-titulo {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px;
+  color: var(--alerta); margin-bottom: 7px;
+}
+.ho-regras ul { margin: 0; padding-left: 18px; }
+.ho-regras li { font-size: 13px; line-height: 1.5; }
+/* Etiqueta abaixo do nome: diz na hora se o colaborador pode levar celular */
+.ho-tag {
+  margin-top: 6px; font-size: 12.5px; color: var(--cinza);
+  background: var(--fundo); border: 1px solid var(--linha);
+  border-radius: var(--raio-sm); padding: 6px 10px;
+}
+.ho-tag-lider { background: var(--verde-claro); border-color: var(--verde); color: var(--verde); font-weight: 600; }
+/* Itens barrados pelas regras */
+.ho-alerta {
+  background: var(--perigo-claro); border: 1px solid var(--perigo); color: var(--perigo);
+  border-radius: var(--raio-sm); padding: 10px 14px; margin-bottom: 12px; font-size: 13px;
+}
+.ho-alerta ul { margin: 6px 0 0; padding-left: 18px; }
+.ho-alerta li { line-height: 1.5; }
+.chk-termo input { accent-color: var(--verde); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+/* Sem realce no hover quando está bloqueado (o verde é o único caso hoje) */
+.btn-verde:disabled:hover { background: var(--verde); border-color: var(--verde); }
 .ho-preview {
   max-width: 100%; max-height: 260px; border-radius: var(--raio-sm);
   border: 1px solid var(--linha-forte); margin: 0 0 12px; display: block;

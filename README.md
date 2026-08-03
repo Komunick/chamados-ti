@@ -49,6 +49,38 @@ Sistema-chamados-ti\
 
 O aviso repete a cada 5 minutos até ser marcado como visto (sino 🔔 no app).
 
+## Home Office 🏠 (saída de equipamento)
+
+Duas abas, além da fila de chamados:
+
+- **Home Office** — só aparece para **líderes** (papel TI/admin, ou o usuário
+  marcado com ⭐ *Líder* no painel de usuários). O líder escolhe o colaborador,
+  escreve os itens que ele vai levar (um por linha) e confirma o termo. Isso
+  **abre um chamado** (categoria *Equipamento*) em nome do líder, avisa a TI e
+  marca o prazo de devolução em **3 dias**, com contador na tela
+  (*restantes → vence hoje → atrasado*).
+- **Devolução Home Office** — para todos. O colaborador citado anexa a **foto**
+  dos aparelhos (comprimida no navegador) e confirma; a devolução entra como
+  observação **no mesmo chamado** da saída, para a TI conferir e finalizar.
+
+### Regras aplicadas pelo sistema
+
+1. **É proibido levar monitor** — qualquer tipo, marca ou tamanho.
+2. **Celular só pode ser levado por líder** — vale a liderança de *quem leva*,
+   não a de quem registra; nome digitado fora da lista de usuários não é
+   considerado líder.
+3. **É proibido levar qualquer item que não esteja citado no chamado.**
+
+As regras ficam escritas na aba, entram na descrição do chamado e são
+conferidas em `ti-web\regras-ho.js` — **o mesmo arquivo** que o navegador
+carrega e que o servidor exige (`require`), para a tela e o servidor nunca
+divergirem. A tela avisa na hora e desabilita o botão; quem barra de fato é o
+servidor. Ao mudar uma regra, **reinicie o servidor** (o Node guarda o módulo
+em memória).
+
+Fotos ficam em `ti-data\ho-anexos\` e são servidas por
+`/api/homeoffice/:id/imagem?token=` (fora da pasta estática).
+
 ## Integração com o assistente (Claude)
 
 Os chamados de melhorias/sistemas pedidos ao assistente são registrados aqui, e

@@ -18,6 +18,9 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const d = require('./db');
+// Regras dos itens do Home Office — o mesmo arquivo que o navegador carrega,
+// para a conferência da tela e a do servidor não divergirem.
+const regrasHO = require('../regras-ho.js');
 
 const PORT = parseInt(process.env.PORT, 10) || 8085;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -99,6 +102,13 @@ function publicoUsuario(u) {
 // Home Office: quem pode registrar saídas — líderes marcados pelo admin, TI e admin.
 function gestorHomeOffice(u) {
   return !!u && (u.papel === 'ti' || u.papel === 'admin' || !!u.lider);
+}
+// Quem É líder de fato (a estrela que o admin marca no painel de usuários).
+// Não confundir com gestorHomeOffice, que é PERMISSÃO de rota: a regra do
+// celular vale pela liderança real, senão TI/admin sem a estrela levariam
+// celular e a tela chamaria de "líder" quem o painel de usuários mostra que não é.
+function ehLider(u) {
+  return !!(u && u.lider);
 }
 function acharChamado(id) {
   return d.db.chamados.find((c) => c.id === id) || null;
@@ -470,13 +480,29 @@ function somarDias(iso, dias) {
   const p = (n) => String(n).padStart(2, '0');
   return dt.getFullYear() + '-' + p(dt.getMonth() + 1) + '-' + p(dt.getDate());
 }
+function dataBR(iso) {
+  const [a, m, dd] = String(iso).split('-');
+  return dd + '/' + m + '/' + a;
+}
+// Corpo do chamado que o líder abre para o colaborador. A lista de itens daqui
+// é o que vale: nada que não esteja escrito nela pode sair da empresa.
+function descricaoChamadoHO(reg, lider) {
+  return 'Saída de equipamento para Home Office registrada por ' + lider.nome + '.\n' +
+    'Colaborador: ' + reg.colaborador.nome + '\n' +
+    'Levado em: ' + dataBR(reg.dataLevada) + '\n' +
+    'Devolver até: ' + dataBR(reg.prazoDevolucao) + ' (' + HO_PRAZO_DIAS + ' dias)\n\n' +
+    'Itens autorizados a sair — somente estes:\n- ' + reg.itens.join('\n- ') + '\n\n' +
+    'Regras:\n- ' + regrasHO.REGRAS.join('\n- ') + '\n\n' +
+    'A devolução é informada pelo colaborador na aba "Devolução Home Office", com foto dos aparelhos.';
+}
 
-// Nomes para o líder escolher na lista (todos os usuários, menos contas de serviço).
+// Nomes para o líder escolher na lista (todos os usuários, menos contas de
+// serviço). Vai junto se é líder — a tela usa isso para a regra do celular.
 rota('GET', '/api/homeoffice/colaboradores', null, (ctx) => {
   if (!gestorHomeOffice(ctx.usuario)) return erro(ctx.res, 403, 'Apenas líderes registram Home Office.');
   const lista = d.db.usuarios
     .filter((u) => u.login !== 'admin' && u.login !== 'claude')
-    .map((u) => ({ id: u.id, nome: u.nome }))
+    .map((u) => ({ id: u.id, nome: u.nome, lider: ehLider(u) }))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   sendJson(ctx.res, 200, { colaboradores: lista });
 });
@@ -494,20 +520,35 @@ rota('POST', '/api/homeoffice', null, (ctx) => {
   if (!gestorHomeOffice(ctx.usuario)) return erro(ctx.res, 403, 'Apenas líderes registram Home Office.');
   const b = ctx.body;
   let colaborador = null;
+  let usuarioColab = null; // conta do colaborador, quando ele existe no sistema
   if (b.colaboradorId) {
     const u = d.db.usuarios.find((x) => x.id === b.colaboradorId);
     if (!u) return erro(ctx.res, 400, 'Colaborador não encontrado.');
+    usuarioColab = u;
     colaborador = { id: u.id, nome: u.nome };
   } else {
     const nome = txt(b.colaboradorNome, 80);
     if (!nome) return erro(ctx.res, 400, 'Informe o colaborador.');
     // Se o nome digitado bate com um usuário, vincula (permite a devolução por ele).
     const u = d.db.usuarios.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
+    usuarioColab = u || null;
     colaborador = { id: u ? u.id : null, nome: u ? u.nome : nome };
   }
   const itens = (Array.isArray(b.itens) ? b.itens : String(b.itens || '').split('\n'))
     .map((i) => txt(i, 120)).filter(Boolean).slice(0, 20);
   if (!itens.length) return erro(ctx.res, 400, 'Informe ao menos um item levado.');
+
+  // Regras da casa. Vale a liderança de QUEM LEVA (o colaborador), não a de
+  // quem registra: um líder não pode liberar celular para um não-líder.
+  const conferencia = regrasHO.validarItens(itens, {
+    colaboradorLider: ehLider(usuarioColab),
+    colaboradorConhecido: !!usuarioColab,
+    colaboradorNome: colaborador.nome,
+  });
+  if (!conferencia.ok) {
+    return erro(ctx.res, 400, conferencia.problemas.map((p) => p.mensagem).join(' '));
+  }
+
   const dataLevada = /^\d{4}-\d{2}-\d{2}$/.test(String(b.dataLevada || '')) ? b.dataLevada : null;
   if (!dataLevada) return erro(ctx.res, 400, 'Informe a data em que os itens foram levados.');
 
@@ -521,11 +562,41 @@ rota('POST', '/api/homeoffice', null, (ctx) => {
     prazoDevolucao: somarDias(dataLevada, HO_PRAZO_DIAS),
     status: 'em_uso', // 'em_uso' | 'devolvido' (atraso é derivado do prazo)
     devolucao: null,
+    chamadoId: null,
   };
+
+  // O líder abre o chamado em nome do colaborador: a TI fica sabendo do que
+  // saiu e o chamado passa a ser a lista oficial de itens autorizados.
+  const chamado = {
+    id: d.novoIdChamado(),
+    criadoEm: d.agora(),
+    atualizadoEm: d.agora(),
+    solicitante: { id: ctx.usuario.id, nome: ctx.usuario.nome },
+    titulo: txt('Home Office — ' + colaborador.nome, 140),
+    descricao: txt(descricaoChamadoHO(registro, ctx.usuario), 4000),
+    categoria: 'equipamento',
+    prioridade: 'media',
+    urgente: false,
+    status: 'pendente',
+    responsavel: null,
+    finalizadoEm: null,
+    comentarios: [],
+    historico: [],
+  };
+  historico(chamado, ctx.usuario, 'Chamado aberto.',
+    'Saída de equipamento para Home Office (' + registro.id + ') — devolver até ' + dataBR(registro.prazoDevolucao) + '.');
+  d.db.chamados.push(chamado);
+  registro.chamadoId = chamado.id;
+  criarNotificacao('novo_chamado', chamado,
+    'Home Office — ' + chamado.id,
+    ctx.usuario.nome + ' registrou saída de equipamento para ' + colaborador.nome +
+      ': ' + itens.join(', ').slice(0, 120) + ' · devolver até ' + dataBR(registro.prazoDevolucao));
+
   d.db.homeoffice.push(registro);
   d.flush();
   notifyChange('homeoffice');
-  sendJson(ctx.res, 200, { registro });
+  notifyChange('chamados');
+  sendJson(ctx.res, 200, { registro, chamado });
 });
 
 rota('POST', '/api/homeoffice/:id/devolucao', null, (ctx) => {
@@ -545,29 +616,50 @@ rota('POST', '/api/homeoffice/:id/devolucao', null, (ctx) => {
   fs.writeFileSync(path.join(HO_ANEXOS_DIR, arquivo), buf);
 
   const observacao = txt(ctx.body.observacao, 1000);
-  const chamado = {
-    id: d.novoIdChamado(),
-    criadoEm: d.agora(),
-    atualizadoEm: d.agora(),
-    solicitante: { id: ctx.usuario.id, nome: ctx.usuario.nome },
-    titulo: 'Devolução Home Office ' + reg.id + ' — ' + reg.colaborador.nome,
-    descricao: 'Devolução dos aparelhos levados para Home Office em ' + reg.dataLevada + ':\n- ' +
-      reg.itens.join('\n- ') + (observacao ? '\n\nObservação: ' + observacao : '') +
-      '\n\nFoto anexada no registro ' + reg.id + ' (aba Home Office).',
-    categoria: 'equipamento',
-    prioridade: 'media',
-    urgente: false,
-    status: 'pendente',
-    responsavel: null,
-    finalizadoEm: null,
-    comentarios: [],
-    historico: [],
-  };
-  historico(chamado, ctx.usuario, 'Chamado aberto.', 'Devolução de equipamentos de Home Office (' + reg.id + ').');
-  d.db.chamados.push(chamado);
-  criarNotificacao('novo_chamado', chamado,
-    'Devolução Home Office — ' + chamado.id,
-    ctx.usuario.nome + ' informou a devolução dos aparelhos (' + reg.id + '): ' + reg.itens.join(', ').slice(0, 140));
+  const textoFoto = 'Foto dos aparelhos anexada no registro ' + reg.id + ' (aba Home Office).';
+
+  // Um chamado por ciclo: a devolução volta no chamado que o líder abriu na
+  // saída, para a TI conferir na mesma conversa. Registros antigos (feitos
+  // antes do chamado de saída existir) continuam abrindo um chamado próprio.
+  let chamado = reg.chamadoId ? acharChamado(reg.chamadoId) : null;
+  if (chamado) {
+    chamado.comentarios.push({
+      id: d.novoIdComentario(),
+      em: d.agora(),
+      por: { id: ctx.usuario.id, nome: ctx.usuario.nome, papel: ctx.usuario.papel },
+      texto: 'Devolução informada por ' + ctx.usuario.nome + '.\n' + textoFoto +
+        (observacao ? '\nObservação: ' + observacao : ''),
+    });
+    if (chamado.status === 'finalizado') { chamado.status = 'pendente'; chamado.finalizadoEm = null; }
+    historico(chamado, ctx.usuario, 'Devolução informada.', 'TI: conferir os itens devolvidos (' + reg.id + ').');
+    criarNotificacao('comentario', chamado,
+      'Devolução Home Office — ' + chamado.id,
+      ctx.usuario.nome + ' informou a devolução dos aparelhos (' + reg.id + '): ' + reg.itens.join(', ').slice(0, 140));
+  } else {
+    chamado = {
+      id: d.novoIdChamado(),
+      criadoEm: d.agora(),
+      atualizadoEm: d.agora(),
+      solicitante: { id: ctx.usuario.id, nome: ctx.usuario.nome },
+      titulo: 'Devolução Home Office ' + reg.id + ' — ' + reg.colaborador.nome,
+      descricao: 'Devolução dos aparelhos levados para Home Office em ' + dataBR(reg.dataLevada) + ':\n- ' +
+        reg.itens.join('\n- ') + (observacao ? '\n\nObservação: ' + observacao : '') +
+        '\n\n' + textoFoto,
+      categoria: 'equipamento',
+      prioridade: 'media',
+      urgente: false,
+      status: 'pendente',
+      responsavel: null,
+      finalizadoEm: null,
+      comentarios: [],
+      historico: [],
+    };
+    historico(chamado, ctx.usuario, 'Chamado aberto.', 'Devolução de equipamentos de Home Office (' + reg.id + ').');
+    d.db.chamados.push(chamado);
+    criarNotificacao('novo_chamado', chamado,
+      'Devolução Home Office — ' + chamado.id,
+      ctx.usuario.nome + ' informou a devolução dos aparelhos (' + reg.id + '): ' + reg.itens.join(', ').slice(0, 140));
+  }
 
   reg.status = 'devolvido';
   reg.devolucao = {
