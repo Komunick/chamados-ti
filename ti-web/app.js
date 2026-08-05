@@ -14,6 +14,7 @@
     busca: '',
     aba: 'chamados',     // 'chamados' | 'homeoffice' | 'devolucao'
     homeoffice: [],      // registros visíveis ao usuário
+    posFila: {},         // id do chamado -> posição na fila de atendimento
     colaboradores: [],   // nomes para o líder escolher
     abertoId: null,      // chamado aberto no painel
     sse: null,
@@ -84,6 +85,17 @@
     return lista.slice().sort((a, b) => (a.criadoEm < b.criadoEm ? 1 : -1));
   }
 
+  // Posição de cada chamado NÃO finalizado na fila de atendimento (mesma ordem
+  // da fila: urgentes → prioridade → mais antigo). Devolve { id: {pos, total} }.
+  // É o que embasa a mensagem "seu chamado está em Nº na fila".
+  function posicoesFila() {
+    const fila = ordenar(estado.chamados.filter((c) => c.status !== 'finalizado'), 'fila');
+    const mapa = {};
+    fila.forEach((c, i) => { mapa[c.id] = { pos: i + 1, total: fila.length }; });
+    return mapa;
+  }
+  const ordinal = (n) => n + 'º';
+
   function filtrar() {
     let lista = estado.chamados;
     if (estado.filtro === 'fila') lista = lista.filter((c) => c.status !== 'finalizado');
@@ -96,6 +108,19 @@
     return ordenar(lista, estado.filtro);
   }
 
+  // Pill de posição na fila. Só para chamados não finalizados. Quando o chamado
+  // é do próprio usuário logado, a pill fica destacada e fala na 2ª pessoa.
+  function filaPill(c) {
+    if (c.status === 'finalizado') return '';
+    const info = (estado.posFila || {})[c.id];
+    if (!info) return '';
+    const meu = estado.usuario && c.solicitante.id === estado.usuario.id;
+    const texto = meu
+      ? `🎫 Seu chamado: ${ordinal(info.pos)} na fila`
+      : `🎫 ${ordinal(info.pos)} na fila`;
+    return `<span class="pill pill-fila${meu ? ' pill-fila-eu' : ''}" title="Posição na fila de atendimento (de ${info.total})">${texto}</span>`;
+  }
+
   function cartao(c) {
     // Cartão do design Stitch: nº em mono discreta, título semibold, meta
     // (solicitante · setor · idade), pill de prioridade e status como pill
@@ -106,6 +131,7 @@
           <div class="c-topo">
             <span class="num">${esc(c.id)}</span>
             ${c.urgente ? '<span class="pill pill-urgente">🚨 Urgente</span>' : ''}
+            ${filaPill(c)}
             <span class="c-idade">aberto ${diasDesde(c.criadoEm)}</span>
           </div>
           <div class="c-titulo">${esc(c.titulo)}</div>
@@ -117,23 +143,47 @@
         <div class="c-lado">
           <span class="c-coment" title="Observações">💬 ${c.comentarios.length}</span>
           <span class="pill pri-${c.prioridade}">${c.prioridade === 'alta' ? '▲' : c.prioridade === 'media' ? '■' : '▼'} ${PRIO_LABEL[c.prioridade]}</span>
-          <select class="status-sel st-${c.status}" data-status="${c.id}">
+          ${podeAtender()
+            ? `<select class="status-sel st-${c.status}" data-status="${c.id}">
             <option value="pendente"${c.status === 'pendente' ? ' selected' : ''}>Pendente</option>
             <option value="em_andamento"${c.status === 'em_andamento' ? ' selected' : ''}>Em andamento</option>
             <option value="finalizado"${c.status === 'finalizado' ? ' selected' : ''}>Finalizado</option>
-          </select>
+          </select>`
+            : `<span class="pill st-${c.status}">${STATUS_LABEL[c.status]}</span>`}
         </div>
       </div>`;
   }
 
+  // Mensagem no topo da lista com a posição dos chamados do próprio usuário na
+  // fila de atendimento (some quando ele não tem chamado em aberto).
+  function mensagemMinhaFila() {
+    const el = $('minha-fila');
+    if (!el) return;
+    const u = estado.usuario;
+    const meus = u ? estado.chamados
+      .filter((c) => c.solicitante.id === u.id && c.status !== 'finalizado')
+      .map((c) => ({ c, pos: (estado.posFila[c.id] || {}).pos }))
+      .filter((x) => x.pos)
+      .sort((a, b) => a.pos - b.pos) : [];
+    if (!meus.length) { el.hidden = true; el.innerHTML = ''; return; }
+    const total = meus[0] ? (estado.posFila[meus[0].c.id].total) : 0;
+    const linhas = meus.map(({ c, pos }) =>
+      `<strong>${esc(c.id)}</strong> — ${esc(c.titulo)}: <strong>${ordinal(pos)}</strong> na fila`).join(' · ');
+    el.hidden = false;
+    el.innerHTML = `🎫 ${meus.length === 1 ? 'Seu chamado está' : 'Seus chamados estão'} na fila de atendimento `
+      + `(de ${total} em espera): ${linhas}. O atendimento segue urgência, prioridade e ordem de chegada.`;
+  }
+
   function desenharLista() {
     const lista = filtrar();
+    estado.posFila = posicoesFila();
     const n = (f) => estado.chamados.filter((c) => f === 'todos' ? true : f === 'fila' ? c.status !== 'finalizado' : c.status === f).length;
     $('c-fila').textContent = n('fila');
     $('c-pend').textContent = n('pendente');
     $('c-and').textContent = n('em_andamento');
     $('c-fin').textContent = n('finalizado');
     $('c-tod').textContent = n('todos');
+    mensagemMinhaFila();
     $('lista').innerHTML = lista.length
       ? lista.map(cartao).join('')
       : '<div class="vazio">Nenhum chamado aqui. 🎉</div>';
@@ -167,6 +217,12 @@
   function gestorHO() {
     const u = estado.usuario;
     return !!u && (u.papel === 'ti' || u.papel === 'admin' || u.lider);
+  }
+  // Quem pode alterar o estado dos chamados (status/prioridade/urgência). O
+  // servidor decide e envia em `atende`; a tela só esconde os controles de
+  // quem não pode — o bloqueio de verdade é no servidor (PUT /api/chamados).
+  function podeAtender() {
+    return !!(estado.usuario && estado.usuario.atende);
   }
   function hojeISO() {
     const d = new Date();
@@ -512,8 +568,14 @@
         ${c.responsavel ? ' · responsável: <strong>' + esc(c.responsavel) + '</strong>' : ''}
         ${c.finalizadoEm ? ' · finalizado em ' + dataFmt(c.finalizadoEm) : ''}
       </div>
+      ${(estado.posFila[c.id] && c.status !== 'finalizado')
+        ? `<div class="minha-fila" style="margin-bottom:12px">🎫 Posição na fila de atendimento:
+             <strong>${ordinal(estado.posFila[c.id].pos)}</strong> de ${estado.posFila[c.id].total} em espera —
+             a ordem segue urgência, prioridade e chegada.</div>`
+        : ''}
       ${c.descricao ? `<div class="desc">${esc(c.descricao)}</div>` : ''}
 
+      ${podeAtender() ? `
       <div class="secao">Atendimento</div>
       <div class="campo-linha">
         <div class="campo"><label>Status</label>
@@ -532,6 +594,7 @@
         </div>
       </div>
       <label class="chk"><input type="checkbox" id="d-urgente"${c.urgente ? ' checked' : ''}> 🚨 Urgente (prioridade máxima na fila)</label>
+      ` : ''}
 
       <div class="secao">Observações dos colaboradores (${c.comentarios.length})</div>
       <div id="d-comentarios">
@@ -566,9 +629,11 @@
         carregar();
       } catch (e) { aviso(e.message, 'erro'); }
     };
-    $('d-status').addEventListener('change', () => salvar({ status: $('d-status').value }, 'Status atualizado.'));
-    $('d-prio').addEventListener('change', () => salvar({ prioridade: $('d-prio').value }, 'Prioridade atualizada.'));
-    $('d-urgente').addEventListener('change', () => salvar({ urgente: $('d-urgente').checked }, $('d-urgente').checked ? 'Marcado como urgente.' : 'Urgência removida.'));
+    if (podeAtender()) {
+      $('d-status').addEventListener('change', () => salvar({ status: $('d-status').value }, 'Status atualizado.'));
+      $('d-prio').addEventListener('change', () => salvar({ prioridade: $('d-prio').value }, 'Prioridade atualizada.'));
+      $('d-urgente').addEventListener('change', () => salvar({ urgente: $('d-urgente').checked }, $('d-urgente').checked ? 'Marcado como urgente.' : 'Urgência removida.'));
+    }
     $('d-comentar').addEventListener('click', async () => {
       const texto = $('d-novo-coment').value.trim();
       if (!texto) { aviso('Escreva a observação.', 'erro'); return; }

@@ -258,6 +258,16 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .pri-media { background: var(--alerta-claro); color: var(--alerta); }
 .pri-baixa { background: var(--azul-claro); color: var(--azul); }
 .pill-urgente { background: var(--perigo); color: #fff; }
+/* Posição na fila de atendimento */
+.pill-fila { background: var(--fundo); color: var(--cinza); border: 1px solid var(--linha-forte); }
+.pill-fila-eu { background: var(--verde-claro); color: var(--verde); border-color: var(--verde); }
+/* Faixa de aviso da posição do próprio chamado (topo da lista e painel) */
+.minha-fila {
+  background: var(--verde-claro); border: 1px solid var(--verde);
+  color: var(--verde-escuro); border-radius: var(--raio-sm);
+  padding: 11px 15px; margin-bottom: 14px; font-size: 13.5px; line-height: 1.45;
+}
+.minha-fila strong { color: var(--verde-escuro); }
 .st-pendente { background: var(--alerta-claro); color: var(--alerta); }
 .st-em_andamento { background: var(--azul-claro); color: var(--azul); }
 .st-finalizado { background: var(--verde-claro); color: var(--ok); }

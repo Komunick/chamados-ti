@@ -96,8 +96,21 @@ function txt(v, max) {
   if (v === null || v === undefined) return '';
   return String(v).trim().slice(0, max || 200);
 }
+// Quem pode ALTERAR O ESTADO de um chamado (status, prioridade, urgencia,
+// responsavel, categoria) — de qualquer chamado, nao so dos proprios. A pedido,
+// restrito a: admin, o papel de atendimento 'ti' (hoje so o assistente 'claude')
+// e o usuario 'junior'. Os demais (todos os solicitantes) apenas ABREM e
+// COMENTAM chamados; nunca mexem no estado.
+const ATENDENTES_EXTRA = new Set(['junior']); // solicitantes autorizados por login
+function podeAtenderChamado(u) {
+  return !!u && (u.papel === 'admin' || u.papel === 'ti' || ATENDENTES_EXTRA.has(u.login));
+}
+
 function publicoUsuario(u) {
-  return { id: u.id, nome: u.nome, login: u.login, papel: u.papel, lider: !!u.lider, criadoEm: u.criadoEm };
+  return {
+    id: u.id, nome: u.nome, login: u.login, papel: u.papel,
+    lider: !!u.lider, atende: podeAtenderChamado(u), criadoEm: u.criadoEm,
+  };
 }
 // Home Office: quem pode registrar saídas — líderes marcados pelo admin, TI e admin.
 function gestorHomeOffice(u) {
@@ -310,9 +323,9 @@ rota('POST', '/api/chamados', null, (ctx) => {
   historico(chamado, ctx.usuario, 'Chamado aberto.',
     'Prioridade ' + PRIO_LABEL[prioridade] + (urgente ? ' · URGENTE' : ''));
   d.db.chamados.push(chamado);
-  // Notifica a TI apenas quando quem abriu é solicitante (a própria TI não
-  // precisa de aviso sobre o que ela mesma registrou).
-  if (ctx.usuario.papel === 'solicitante') {
+  // Notifica a TI apenas quando quem abriu NÃO atende (a própria TI e os
+  // atendentes não precisam de aviso sobre o que eles mesmos registram).
+  if (!podeAtenderChamado(ctx.usuario)) {
     criarNotificacao(
       'novo_chamado', chamado,
       'Novo chamado ' + chamado.id + (urgente ? ' (URGENTE)' : ''),
@@ -336,7 +349,19 @@ rota('PUT', '/api/chamados/:id', null, (ctx) => {
   const chamado = acharChamado(ctx.params.id);
   if (!chamado) return erro(ctx.res, 404, 'Chamado não encontrado.');
   const b = ctx.body;
-  const podeEditarTexto = ctx.usuario.papel !== 'solicitante' || chamado.solicitante.id === ctx.usuario.id;
+  // Estado do chamado (status/prioridade/urgencia/responsavel/categoria) so
+  // pode ser mexido por quem atende (admin, TI/claude, junior). Qualquer outro
+  // usuario que tente alterar esses campos leva 403 — mesmo no proprio chamado.
+  const CAMPOS_ESTADO = ['status', 'prioridade', 'urgente', 'responsavel', 'categoria'];
+  const tentaEstado = CAMPOS_ESTADO.some((k) => b[k] !== undefined);
+  if (tentaEstado && !podeAtenderChamado(ctx.usuario)) {
+    return erro(ctx.res, 403,
+      'Apenas a TI (admin, Claude ou Junior) pode alterar o estado dos chamados.');
+  }
+  // Texto (titulo/descricao): quem atende edita qualquer um; os demais so o
+  // proprio chamado.
+  const podeEditarTexto = podeAtenderChamado(ctx.usuario)
+    || chamado.solicitante.id === ctx.usuario.id;
   let mudou = false;
 
   if (b.status !== undefined && b.status !== chamado.status) {
@@ -346,7 +371,7 @@ rota('PUT', '/api/chamados/:id', null, (ctx) => {
     chamado.finalizadoEm = b.status === 'finalizado' ? d.agora() : null;
     if (b.status === 'em_andamento' && !chamado.responsavel) chamado.responsavel = ctx.usuario.nome;
     historico(chamado, ctx.usuario, 'Status alterado.', STATUS_LABEL[de] + ' → ' + STATUS_LABEL[b.status]);
-    if (ctx.usuario.papel === 'solicitante') {
+    if (!podeAtenderChamado(ctx.usuario)) {
       criarNotificacao('status', chamado,
         'Status alterado — ' + chamado.id,
         ctx.usuario.nome + ' mudou o status para ' + STATUS_LABEL[b.status] + ' · ' + chamado.titulo);
@@ -415,7 +440,7 @@ rota('POST', '/api/chamados/:id/comentarios', null, (ctx) => {
   };
   chamado.comentarios.push(comentario);
   historico(chamado, ctx.usuario, 'Observação adicionada.', texto.slice(0, 120));
-  if (ctx.usuario.papel === 'solicitante') {
+  if (!podeAtenderChamado(ctx.usuario)) {
     criarNotificacao('comentario', chamado,
       'Nova observação — ' + chamado.id,
       ctx.usuario.nome + ': ' + texto.slice(0, 140) + ' · ' + chamado.titulo);
