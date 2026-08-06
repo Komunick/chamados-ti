@@ -1,17 +1,18 @@
 /* Chamados de TI — Brazil Transports.
-   Porte fiel do design Google Stitch (spec DESIGN.md do projeto "Chamados TI
-   Brazil Transports", família visual "Patrimonial Enterprise"): topbar fixa
-   64px em gradiente verde-floresta, CTA ouro, filtros segmentados com
-   contadores, fila em cartões com pills e drawer de detalhe com cabeçalho
-   verde. CSS puro, sem CDN/fontes remotas. Tema controlado por data-tema no
-   <html> (chave localStorage 'ti.tema'); paleta inteira em variáveis. */
+   Porte fiel do design Google Stitch "Fila Leve" (projeto "Chamados TI Brazil
+   Transports — Mobile First"): mobile-first com bottom nav e FAB ouro, busca
+   acima de chips de filtro roláveis, fila em cartões com rodapé, detalhe em
+   folha deslizante (bottom-sheet no celular, drawer no desktop), topbar em
+   gradiente verde-floresta e CTA ouro com texto escuro. CSS puro, sem
+   CDN/fontes remotas. Tema controlado por data-tema no <html> (chave
+   localStorage 'ti.tema'); paleta inteira em variáveis. */
 
 :root {
-  /* Identidade Brazil Transports */
+  /* Identidade Brazil Transports (tokens do design system Fila Leve) */
   --verde: #124F2C;            /* primária verde-floresta */
   --verde-escuro: #0C3C20;
   --verde-claro: #E4F1E9;      /* fundo suave da primária */
-  --ouro: #D9B303;             /* acento — ativos, foco, contadores, destaques */
+  --ouro: #D9B303;             /* acento — CTAs, ativos, foco, destaques */
   --ouro-hover: #C4A203;
   --ouro-texto: #201A00;
   --fundo: #F1F4F2;            /* cinza-esverdeado frio */
@@ -41,11 +42,11 @@
   /* Forma */
   --raio: 12px;
   --raio-sm: 8px;
-  --sombra: 0 1px 2px rgba(16, 33, 24, .06), 0 8px 24px rgba(16, 33, 24, .07);
+  --sombra: 0 1px 2px rgba(16, 33, 24, .05), 0 4px 12px rgba(16, 33, 24, .06);
   --sombra-alta: 0 2px 4px rgba(16, 33, 24, .08), 0 16px 40px rgba(16, 33, 24, .14);
   --foco-anel: 0 0 0 3px rgba(217, 179, 3, .28);
   --seta-sel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235E6B62' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  --lupa: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24'%3E%3Cpath d='M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm9 16.4L16.6 17' fill='none' stroke='%238A968D' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --lupa: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24'%3E%3Cpath d='M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm9 16.4L16.6 17' fill='none' stroke='%238A968D' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
   --mono: "Cascadia Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   color-scheme: light;
@@ -53,8 +54,8 @@
 
 /* ---------- Modo escuro ----------
    Ativado com data-tema="escuro" no <html> (botão no topo; preferência salva
-   no navegador, padrão segue o sistema). Paleta derivada do design: fundos
-   verdes-acinzentados profundos, topbar segue verde escura, ouro mantém. */
+   no navegador, padrão segue o sistema). Paleta do design: fundo #141A16,
+   superfícies #1B231D, primária suavizada #7FC79D, ouro constante. */
 [data-tema="escuro"] {
   color-scheme: dark;
   --verde: #7FC79D;
@@ -84,10 +85,9 @@
   --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35);
   --sombra-alta: 0 2px 4px rgba(0, 0, 0, .5), 0 16px 40px rgba(0, 0, 0, .5);
   --seta-sel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239AA79E' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  --lupa: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24'%3E%3Cpath d='M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm9 16.4L16.6 17' fill='none' stroke='%2374816F' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --lupa: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24'%3E%3Cpath d='M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm9 16.4L16.6 17' fill='none' stroke='%2374816F' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 /* Sob tema escuro a primária vira verde clara: textos sobre ela escurecem. */
-[data-tema="escuro"] .seg-btn.active { color: #10231A; }
 [data-tema="escuro"] .btn-verde { color: #10231A; }
 [data-tema="escuro"] .pill-urgente { color: #2A0F0F; }
 [data-tema="escuro"] .sino-c { color: #2A0F0F; }
@@ -111,27 +111,32 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .ico { display: inline-flex; flex: none; }
 .ico svg { display: block; }
 
-/* ---------- Topbar fixa 64px em gradiente verde-floresta ---------- */
+/* ---------- Topbar 64px em gradiente verde-floresta ---------- */
 .topo {
   position: sticky; top: 0; z-index: 30;
   height: 64px;
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 0 24px;
-  background: linear-gradient(135deg, var(--topo-a) 0%, var(--topo-b) 100%);
+  background: linear-gradient(180deg, var(--topo-a) 0%, var(--topo-b) 100%);
   color: var(--topo-texto);
-  border-bottom: 2px solid var(--ouro);
   box-shadow: 0 1px 2px rgba(8, 20, 13, .18), 0 8px 24px rgba(8, 20, 13, .16);
 }
 .marca { display: flex; align-items: center; gap: 12px; min-width: 0; }
+/* Plaqueta branca da logo — as cores da marca só funcionam sobre fundo claro. */
 .marca-ico {
-  width: 36px; height: 36px; border-radius: 10px;
+  width: 40px; height: 40px; border-radius: 10px;
   display: inline-flex; align-items: center; justify-content: center; flex: none;
-  background: rgba(255, 255, 255, .12);
-  border: 1px solid rgba(255, 255, 255, .18);
-  color: var(--ouro);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
+  background: #fff;
+  border: 1px solid rgba(255, 255, 255, .55);
+  box-shadow: 0 1px 3px rgba(8, 20, 13, .3);
 }
-.marca-titulo { font-weight: 700; font-size: 16px; letter-spacing: -.2px; line-height: 1.2; white-space: nowrap; }
+.marca-ico img { display: block; }
+/* min-width:0 na cadeia flex — sem isso o texto vaza em vez de reticenciar. */
+.marca-texto { min-width: 0; }
+.marca-titulo {
+  font-weight: 700; font-size: 16px; letter-spacing: -.2px; line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .marca-sub {
   font-size: 10px; font-weight: 600; color: rgba(233, 242, 236, .72);
   text-transform: uppercase; letter-spacing: 1.6px; line-height: 1.3; white-space: nowrap;
@@ -151,11 +156,13 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .btn {
   display: inline-flex; align-items: center; gap: 6px; justify-content: center;
   border: 1px solid var(--linha-forte); background: var(--branco); color: var(--texto);
-  padding: 8px 14px; border-radius: var(--raio-sm); font-weight: 600; font-size: 13px;
-  transition: background .12s, border-color .12s, box-shadow .12s;
+  padding: 9px 16px; border-radius: 999px; font-weight: 600; font-size: 13px;
+  min-height: 40px;
+  transition: background .12s, border-color .12s, box-shadow .12s, transform .1s;
 }
 .btn:hover { border-color: var(--cinza-2); }
-/* CTA primário OURO com texto escuro — fixo nos dois temas. */
+.btn:active { transform: scale(.97); }
+/* CTA primário: pill OURO com texto escuro — fixo nos dois temas. */
 .btn-primario {
   background: var(--ouro); border-color: var(--ouro); color: var(--ouro-texto);
   font-weight: 700;
@@ -164,12 +171,12 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .btn-primario:hover { background: var(--ouro-hover); border-color: var(--ouro-hover); color: var(--ouro-texto); }
 .btn-fantasma { background: rgba(255, 255, 255, .09); border-color: rgba(255, 255, 255, .22); color: #E9F2EC; position: relative; }
 .btn-fantasma:hover { background: rgba(255, 255, 255, .17); border-color: rgba(255, 255, 255, .32); }
-.btn-mini { padding: 5px 11px; font-size: 12px; }
+.btn-mini { padding: 6px 12px; font-size: 12px; min-height: 34px; }
 .btn-verde { background: var(--verde); border-color: var(--verde); color: #fff; }
 .btn-verde:hover { background: var(--verde-escuro); border-color: var(--verde-escuro); }
 /* Botões de ícone da topbar (sino, tema, usuários) */
 .btn-ico {
-  position: relative; width: 38px; height: 38px; flex: none;
+  position: relative; width: 40px; height: 40px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
   background: rgba(255, 255, 255, .09); border: 1px solid rgba(255, 255, 255, .22);
   border-radius: 999px; color: #E9F2EC;
@@ -178,43 +185,45 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .btn-ico:hover { background: rgba(255, 255, 255, .17); border-color: rgba(255, 255, 255, .32); }
 .btn-x { background: none; border: none; font-size: 16px; color: inherit; opacity: .85; border-radius: 8px; padding: 4px 8px; }
 .btn-x:hover { opacity: 1; background: rgba(255, 255, 255, .12); }
+/* Badge do sino em OURO com texto escuro (design Fila Leve) */
 .sino-c {
-  position: absolute; top: -5px; right: -5px; background: var(--perigo); color: #fff;
+  position: absolute; top: -5px; right: -5px; background: var(--ouro); color: var(--ouro-texto);
   font-size: 10.5px; font-weight: 800; border-radius: 999px; padding: 1px 6px;
   border: 2px solid var(--topo-b); font-family: var(--mono);
 }
+[data-tema="escuro"] .sino-c { color: var(--ouro-texto); }
 /* Alternador de tema: lua no claro, sol no escuro */
 .ico-sol { display: none; }
 [data-tema="escuro"] .ico-lua { display: none; }
 [data-tema="escuro"] .ico-sol { display: inline-flex; }
 
-/* ---------- Filtros segmentados + busca ---------- */
-.conteudo { max-width: 1120px; margin: 0 auto; padding: 22px 24px 88px; }
-.filtros { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
-.seg {
-  display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
-  background: var(--branco); border: 1px solid var(--linha); border-radius: 999px;
-  padding: 4px; box-shadow: var(--sombra);
-}
+/* ---------- Busca + chips de filtro roláveis ---------- */
+.conteudo { max-width: 1120px; margin: 0 auto; padding: 22px 24px 96px; }
+.filtros { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+/* Chips independentes: pill branca com borda; ativa vira pill ouro sólida. */
+.seg { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; overflow-x: auto; padding: 2px; scrollbar-width: none; }
+.seg::-webkit-scrollbar { display: none; }
 .seg-btn {
-  border: none; background: transparent; padding: 7px 13px; border-radius: 999px;
-  font-weight: 600; font-size: 12.5px; color: var(--cinza);
+  border: 1px solid var(--linha); background: var(--branco); color: var(--cinza);
+  padding: 0 14px; height: 40px; border-radius: 999px; flex: none;
+  font-weight: 600; font-size: 12.5px;
   display: inline-flex; gap: 7px; align-items: center;
-  transition: background .12s, color .12s;
+  box-shadow: var(--sombra);
+  transition: background .12s, color .12s, border-color .12s, transform .1s;
 }
 .seg-btn:hover { background: var(--verde-claro); color: var(--texto); }
-.seg-btn.active { background: var(--verde); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14); }
-/* Contadores — o ouro é reservado ao segmento ativo */
+.seg-btn:active { transform: scale(.96); }
+.seg-btn.active { background: var(--ouro); border-color: var(--ouro); color: var(--ouro-texto); font-weight: 700; }
 .seg-c {
   font-family: var(--mono); font-size: 11px; font-weight: 700; line-height: 1;
   padding: 3px 7px; border-radius: 999px;
-  background: var(--verde-claro); color: var(--verde);
+  background: var(--fundo); color: var(--cinza);
 }
-.seg-btn.active .seg-c { background: var(--ouro); color: var(--ouro-texto); }
+.seg-btn.active .seg-c { background: var(--ouro-texto); color: var(--ouro); }
 .busca {
-  flex: 1; min-width: 230px;
-  border: 1px solid var(--linha-forte); border-radius: 999px;
-  padding: 10px 16px 10px 40px;
+  flex: 1; min-width: 230px; height: 44px;
+  border: 1px solid var(--linha); border-radius: var(--raio);
+  padding: 10px 16px 10px 42px;
   background: var(--branco) var(--lupa) no-repeat 16px center;
   color: var(--texto); outline: none; box-shadow: var(--sombra);
   transition: border-color .12s, box-shadow .12s;
@@ -223,19 +232,19 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .busca::placeholder { color: var(--cinza-2); }
 
 /* ---------- Fila em cartões ---------- */
-#lista { display: flex; flex-direction: column; gap: 10px; }
+#lista { display: flex; flex-direction: column; gap: 14px; }
 .cartao {
   background: var(--branco); border: 1px solid var(--linha); border-radius: var(--raio);
-  box-shadow: var(--sombra); padding: 14px 18px;
+  box-shadow: var(--sombra); padding: 15px 18px;
   display: flex; align-items: center; gap: 16px; cursor: pointer;
   transition: border-color .12s, box-shadow .12s, transform .08s;
 }
 .cartao:hover { border-color: var(--verde); box-shadow: var(--sombra-alta); transform: translateY(-1px); }
 .cartao.urgente { border-left: 4px solid var(--perigo); padding-left: 15px; }
 .c-info { flex: 1; min-width: 0; }
-.c-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.c-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
 .c-titulo {
-  font-weight: 600; font-size: 15px; letter-spacing: -.1px;
+  font-weight: 600; font-size: 16px; letter-spacing: -.1px;
   overflow: hidden; text-overflow: ellipsis;
 }
 .c-sub { color: var(--cinza); font-size: 12.5px; margin-top: 3px; }
@@ -246,7 +255,7 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
   background: var(--fundo); border: 1px solid var(--linha); border-radius: 6px; padding: 2px 8px;
   white-space: nowrap;
 }
-.c-idade { font-size: 11.5px; color: var(--cinza-2); }
+.c-idade { font-size: 11.5px; color: var(--cinza-2); margin-left: auto; }
 .c-coment { font-size: 12px; color: var(--cinza); white-space: nowrap; }
 /* Pills totalmente arredondadas */
 .pill {
@@ -257,15 +266,17 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .pri-alta { background: var(--perigo-claro); color: var(--perigo); }
 .pri-media { background: var(--alerta-claro); color: var(--alerta); }
 .pri-baixa { background: var(--azul-claro); color: var(--azul); }
-.pill-urgente { background: var(--perigo); color: #fff; }
-/* Posição na fila de atendimento */
+/* Urgente: tinta vermelha com borda (design), não bloco sólido */
+.pill-urgente { background: var(--perigo-claro); color: var(--perigo); border: 1px solid var(--perigo); text-transform: uppercase; font-size: 10px; }
+[data-tema="escuro"] .pill-urgente { color: var(--perigo); }
+/* Posição na fila de atendimento — tinta ouro com borda */
 .pill-fila { background: var(--fundo); color: var(--cinza); border: 1px solid var(--linha-forte); }
-.pill-fila-eu { background: var(--verde-claro); color: var(--verde); border-color: var(--verde); }
+.pill-fila-eu { background: rgba(217, 179, 3, .16); color: var(--texto); border-color: var(--ouro); }
 /* Faixa de aviso da posição do próprio chamado (topo da lista e painel) */
 .minha-fila {
   background: var(--verde-claro); border: 1px solid var(--verde);
-  color: var(--verde-escuro); border-radius: var(--raio-sm);
-  padding: 11px 15px; margin-bottom: 14px; font-size: 13.5px; line-height: 1.45;
+  color: var(--verde-escuro); border-radius: var(--raio);
+  padding: 13px 16px; margin-bottom: 16px; font-size: 13.5px; line-height: 1.5;
 }
 .minha-fila strong { color: var(--verde-escuro); }
 .st-pendente { background: var(--alerta-claro); color: var(--alerta); }
@@ -291,7 +302,47 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
   padding: 44px 24px; text-align: center; color: var(--cinza); font-size: 13.5px;
 }
 
-/* ---------- Drawer de detalhe (painel lateral à direita) ---------- */
+/* ---------- FAB "+ Novo chamado" (só no celular) ---------- */
+.fab {
+  display: none;
+  position: fixed; right: 18px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 45;
+  padding: 13px 20px; font-size: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .18);
+}
+
+/* ---------- Bottom nav (só no celular) ---------- */
+.bnav {
+  display: none;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 46;
+  justify-content: space-around; align-items: center;
+  background: var(--branco); border-top: 1px solid var(--linha);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, .08);
+  padding: 6px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+}
+/* Cinco itens precisam caber em 360px: rótulo curto, sem caixa-alta e sem
+   espaçamento de letra — senão "Home Office" quebra e "Devolução" corta. */
+.bn-item {
+  position: relative; border: none; background: transparent; color: var(--cinza);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 5px 6px; border-radius: 14px; min-height: 48px;
+  flex: 1 1 0; min-width: 0;
+  font-size: 9.5px; font-weight: 700; line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background .12s, color .12s;
+}
+.bn-item .ico { position: relative; }
+.bn-item.active { background: var(--ouro); color: var(--ouro-texto); }
+.bn-c {
+  position: absolute; top: -4px; right: -9px;
+  background: var(--perigo); color: #fff;
+  font-size: 9.5px; font-weight: 800; min-width: 15px; height: 15px;
+  border-radius: 999px; padding: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); line-height: 1;
+}
+[data-tema="escuro"] .bn-c { color: #2A0F0F; }
+
+/* ---------- Folha de detalhe (drawer no desktop, sheet no celular) ---------- */
 .painel-fundo { position: fixed; inset: 0; background: rgba(10, 20, 14, .5); z-index: 40; backdrop-filter: blur(1.5px); }
 .painel {
   position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 96vw); z-index: 50;
@@ -301,33 +352,41 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
   border-radius: 14px 0 0 14px; overflow: hidden;
 }
 .painel.aberto { transform: translateX(0); }
-/* Cabeçalho verde do drawer */
+/* Cabeçalho verde da folha */
 .painel-topo {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 18px 20px;
-  background: linear-gradient(135deg, var(--topo-a) 0%, var(--topo-b) 100%);
+  background: linear-gradient(180deg, var(--topo-a) 0%, var(--topo-b) 100%);
   color: var(--topo-texto);
-  border-bottom: 2px solid var(--ouro);
   flex: none;
 }
 .painel-topo h2 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -.1px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .painel-corpo { padding: 20px 20px 44px; overflow-y: auto; }
 
-/* Campos e formulários */
-.campo { margin-bottom: 12px; }
+/* Campos e formulários — inputs altos com rótulos sempre visíveis */
+.campo { margin-bottom: 14px; }
 .campo label {
-  display: block; font-size: 11px; font-weight: 700; color: var(--cinza);
-  text-transform: uppercase; letter-spacing: .8px; margin-bottom: 5px;
+  display: block; font-size: 12px; font-weight: 600; color: var(--cinza);
+  margin-bottom: 6px;
 }
 .campo input, .campo select, .campo textarea {
-  width: 100%; border: 1px solid var(--linha-forte); border-radius: var(--raio-sm);
-  padding: 9px 11px; outline: none; background: var(--campo); color: var(--texto);
+  width: 100%; border: 1px solid var(--linha); border-radius: var(--raio);
+  padding: 12px 14px; min-height: 46px; outline: none; background: var(--campo); color: var(--texto);
   transition: border-color .12s, box-shadow .12s;
 }
+.campo textarea { min-height: 84px; resize: vertical; }
 .campo input:focus, .campo select:focus, .campo textarea:focus { border-color: var(--ouro); box-shadow: var(--foco-anel); }
 .campo-linha { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.chk { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 13.5px; cursor: pointer; padding: 8px 0; }
-.chk input { width: 17px; height: 17px; accent-color: var(--perigo); }
+/* Checkbox de urgência em cartão tocável vermelho (design) */
+.chk {
+  display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13.5px; cursor: pointer;
+  border: 1px solid var(--perigo); background: var(--perigo-claro); color: var(--perigo);
+  border-radius: var(--raio); padding: 12px 14px; margin: 2px 0 6px; min-height: 48px;
+}
+.chk input { width: 18px; height: 18px; accent-color: var(--perigo); flex: none; }
+/* Termo do Home Office: cartão neutro com aceite verde */
+.chk-termo { border-color: var(--linha); background: var(--fundo); color: var(--texto); font-weight: 500; }
+.chk-termo input { accent-color: var(--verde); }
 .acoes { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 .desc {
   white-space: pre-wrap; background: var(--fundo); border: 1px solid var(--linha);
@@ -380,39 +439,35 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
   position: fixed; inset: 0; z-index: 100;
   display: flex; align-items: center; justify-content: center; padding: 20px;
   background:
-    radial-gradient(900px 480px at 85% -10%, rgba(217, 179, 3, .14), transparent 60%),
-    radial-gradient(700px 420px at 0% 110%, rgba(18, 79, 44, .5), transparent 65%),
-    linear-gradient(160deg, #0E3F23, #123324 55%, #0B2418);
+    radial-gradient(900px 480px at 85% -10%, rgba(217, 179, 3, .1), transparent 60%),
+    linear-gradient(175deg, #124F2C 0%, #0E3F23 60%, #0B2A18 100%);
 }
 .login-cartao {
-  width: min(380px, 94vw); background: var(--branco); border-radius: 16px;
-  padding: 30px 28px; box-shadow: 0 24px 80px rgba(0, 0, 0, .4); text-align: center;
+  width: min(400px, 94vw); background: var(--branco); border-radius: 16px;
+  padding: 32px 28px; box-shadow: 0 24px 80px rgba(0, 0, 0, .4); text-align: center;
   border: 1px solid var(--linha);
 }
-.login-ico {
-  width: 52px; height: 52px; margin: 0 auto; border-radius: 14px;
-  display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--topo-a), var(--topo-b)); color: var(--ouro);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 6px 16px rgba(12, 60, 32, .35);
+/* Logo completa no cartão de login (a marca fica sobre o branco do cartão). */
+.login-logo { display: block; width: min(240px, 70%); height: auto; margin: 0 auto 4px; }
+[data-tema="escuro"] .login-logo { filter: brightness(1.35); }
+.login-titulo {
+  font-size: 20px; font-weight: 700; letter-spacing: -.2px; margin-top: 14px;
+  padding-top: 14px; border-top: 1px solid var(--linha);
 }
-.login-titulo { font-size: 19px; font-weight: 700; letter-spacing: -.2px; margin-top: 12px; }
-.login-marca {
-  font-size: 10px; font-weight: 700; color: var(--cinza);
-  text-transform: uppercase; letter-spacing: 2px; margin-top: 2px;
-}
-.login-sub { color: var(--cinza); font-size: 12.5px; margin: 8px 0 20px; }
+.login-sub { color: var(--cinza); font-size: 12.5px; margin: 8px 0 22px; }
 .login-cartao label {
-  display: block; text-align: left; font-size: 11px; font-weight: 700; color: var(--cinza);
-  text-transform: uppercase; letter-spacing: .8px; margin-bottom: 12px;
+  display: block; text-align: left; font-size: 12px; font-weight: 600; color: var(--cinza);
+  margin-bottom: 14px;
 }
 .login-cartao input {
-  width: 100%; margin-top: 5px; border: 1px solid var(--linha-forte); border-radius: var(--raio-sm);
-  padding: 10px 12px; outline: none; background: var(--campo); color: var(--texto);
-  font-size: 14px; transition: border-color .12s, box-shadow .12s;
+  width: 100%; margin-top: 6px; border: 1px solid var(--linha); border-radius: var(--raio);
+  padding: 14px; min-height: 52px; outline: none; background: var(--campo); color: var(--texto);
+  font-size: 15px; transition: border-color .12s, box-shadow .12s;
 }
 .login-cartao input:focus { border-color: var(--ouro); box-shadow: var(--foco-anel); }
-.login-btn { width: 100%; margin-top: 8px; padding: 11px; font-size: 14px; }
+.login-btn { width: 100%; margin-top: 8px; padding: 14px; min-height: 52px; font-size: 15px; }
 .login-erro { background: var(--perigo-claro); color: var(--perigo); border-radius: var(--raio-sm); padding: 9px 12px; font-size: 12.5px; font-weight: 600; margin-bottom: 10px; text-align: left; }
+.login-ajuda { margin-top: 16px; font-size: 12px; color: var(--cinza); }
 
 /* ---------- Abas (Chamados · Home Office · Devolução) ---------- */
 .abas {
@@ -435,21 +490,21 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 .ho-form {
   background: var(--branco); border: 1px solid var(--linha); border-radius: var(--raio);
   box-shadow: var(--sombra); padding: 18px 20px; margin-bottom: 4px;
-  border-top: 3px solid var(--ouro);
 }
-.ho-lista { display: flex; flex-direction: column; gap: 10px; }
+.ho-lista { display: flex; flex-direction: column; gap: 14px; }
 .ho-cartao { cursor: default; }
 .ho-cartao:hover { transform: none; border-color: var(--linha); box-shadow: var(--sombra); }
 .pill-prazo-ok { background: var(--verde-claro); color: var(--ok); }
 .pill-prazo-hoje { background: var(--alerta-claro); color: var(--alerta); }
 .pill-prazo-atrasado { background: var(--perigo); color: #fff; }
-.pill-devolvido { background: var(--azul-claro); color: var(--azul); }
+[data-tema="escuro"] .pill-prazo-atrasado { color: #2A0F0F; }
+.pill-devolvido { background: var(--verde-claro); color: var(--ok); }
 .pill-lider { background: var(--alerta-claro); color: var(--alerta); }
 .ho-link { color: var(--verde); font-weight: 700; text-decoration: underline; }
 /* Quadro das regras (monitor nunca, celular só de líder, nada fora do chamado) */
 .ho-regras {
   background: var(--alerta-claro); border: 1px solid var(--alerta);
-  border-radius: var(--raio-sm); padding: 12px 14px; margin-bottom: 16px;
+  border-radius: var(--raio); padding: 13px 15px; margin-bottom: 16px;
 }
 .ho-regras-titulo {
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px;
@@ -471,7 +526,6 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
 }
 .ho-alerta ul { margin: 6px 0 0; padding-left: 18px; }
 .ho-alerta li { line-height: 1.5; }
-.chk-termo input { accent-color: var(--verde); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 /* Sem realce no hover quando está bloqueado (o verde é o único caso hoje) */
 .btn-verde:disabled:hover { background: var(--verde); border-color: var(--verde); }
@@ -480,35 +534,243 @@ input, select, textarea { font-family: inherit; font-size: 13.5px; }
   border: 1px solid var(--linha-forte); margin: 0 0 12px; display: block;
 }
 
+/* No desktop os chips ficam à esquerda e a busca compacta à direita. Eles
+   QUEBRAM linha em vez de rolar: sem barra visível, um chip escondido fora da
+   tela é um chip que ninguém encontra. */
+@media (min-width: 769px) {
+  .seg { flex: 1 1 auto; flex-wrap: wrap; overflow-x: visible; row-gap: 8px; }
+  .busca { flex: 0 1 300px; margin-left: auto; }
+}
+
+/* ---------- SLA (prazo de atendimento) ---------- */
+.sla-ok { background: var(--verde-claro); color: var(--ok); }
+.sla-perto { background: var(--alerta-claro); color: var(--alerta); }
+.sla-estourado { background: var(--perigo); color: #fff; }
+[data-tema="escuro"] .sla-estourado { color: #2A0F0F; }
+/* Barra esquerda vermelha para o que já venceu (mesma leitura do urgente). */
+.cartao.atrasado { border-left: 4px solid var(--perigo); padding-left: 15px; }
+.seg-btn.seg-alerta { border-color: var(--perigo); color: var(--perigo); }
+.seg-btn.seg-alerta .seg-c { background: var(--perigo-claro); color: var(--perigo); }
+.seg-btn.seg-alerta.active { background: #B3261E; border-color: #B3261E; color: #fff; }
+.seg-btn.seg-alerta.active .seg-c { background: #fff; color: #B3261E; }
+/* Aviso do prazo previsto no formulário de novo chamado */
+.sla-aviso {
+  background: var(--verde-claro); border: 1px solid var(--verde); color: var(--verde-escuro);
+  border-radius: var(--raio); padding: 10px 14px; font-size: 12.5px; margin: 2px 0 10px;
+}
+
+/* ---------- Anexos (fotos do chamado) ---------- */
+.anexos { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 10px; }
+.anexo-mini { position: relative; width: 88px; height: 88px; flex: none; }
+.anexo-mini img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  border-radius: 10px; border: 1px solid var(--linha-forte); background: var(--fundo);
+}
+/* Vermelho sólido com texto branco nos dois temas: no escuro a variável
+   --perigo vira rosa-claro e o ✕ branco sumiria em cima dela. */
+.anexo-x {
+  position: absolute; top: -7px; right: -7px; width: 24px; height: 24px;
+  border-radius: 999px; border: 2px solid var(--branco); background: #B3261E; color: #fff;
+  font-size: 11px; font-weight: 700; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
+.anexo-x:hover { background: #8C1D18; }
+/* Botão de escolher arquivo com a mesma cara dos demais botões.
+   O <input type=file> fica invisível mas AINDA focável pelo teclado (display
+   none o tiraria da ordem de tabulação e o botão viraria inalcançável). */
+.arquivo-btn {
+  display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+  border: 1px dashed var(--linha-forte); background: var(--fundo); color: var(--cinza);
+  padding: 12px 16px; border-radius: var(--raio); font-weight: 600; font-size: 13px;
+  min-height: 46px; width: 100%; cursor: pointer; margin-bottom: 8px;
+  transition: border-color .12s, color .12s;
+}
+.arquivo-btn:hover { border-color: var(--ouro); color: var(--texto); }
+.arquivo-input {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+/* Foco no input escondido acende o rótulo, que é o que a pessoa enxerga
+   (no HTML o <label> vem imediatamente antes do <input>). */
+.arquivo-btn:has(+ .arquivo-input:focus-visible) { border-color: var(--ouro); box-shadow: var(--foco-anel); }
+
+/* ---------- Avaliação do atendimento ---------- */
+.avaliacao, .avaliacao-feita, .reabrir {
+  background: var(--fundo); border: 1px solid var(--linha);
+  border-radius: var(--raio); padding: 14px;
+}
+/* Ouro escuro para a nota ter contraste sobre o cartão claro (#8A7202 ≈ 4.6:1). */
+.avaliacao-feita .aval-nota { font-size: 20px; color: #8A7202; letter-spacing: 2px; margin-bottom: 4px; }
+[data-tema="escuro"] .avaliacao-feita .aval-nota { color: var(--ouro); }
+.avaliacao-feita .aval-nota span { font-size: 13px; color: var(--cinza); letter-spacing: 0; margin-left: 6px; }
+.estrelas { display: flex; gap: 4px; }
+/* Estrela vazia precisa ser VISÍVEL (é o alvo do clique): cinza médio, não a
+   cor de linha, que quase some nos dois temas. */
+.estrela {
+  border: none; background: none; font-size: 34px; line-height: 1;
+  color: var(--cinza-2); padding: 2px 4px; transition: color .12s, transform .1s;
+}
+.estrela:hover { transform: scale(1.12); color: var(--ouro-hover); }
+.estrela.on { color: #C9A303; }
+[data-tema="escuro"] .estrela.on { color: var(--ouro); }
+
+/* ---------- Base de conhecimento ---------- */
+.kb-lista { display: flex; flex-direction: column; gap: 12px; }
+.kb-cartao .c-sub { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* Sugestões no formulário de novo chamado */
+.kb-sugestoes {
+  background: var(--verde-claro); border: 1px solid var(--verde);
+  border-radius: var(--raio); padding: 12px 14px; margin: -4px 0 14px;
+}
+.kb-titulo { font-size: 12px; font-weight: 700; color: var(--verde-escuro); margin-bottom: 8px; }
+.kb-item {
+  display: block; width: 100%; text-align: left;
+  border: 1px solid var(--verde); background: var(--branco); color: var(--verde-escuro);
+  border-radius: var(--raio-sm); padding: 10px 12px; margin-bottom: 6px;
+  font-weight: 600; font-size: 13px; min-height: 44px;
+  transition: background .12s;
+}
+.kb-item:hover, .kb-item.aberto { background: var(--verde); color: #fff; }
+[data-tema="escuro"] .kb-item:hover, [data-tema="escuro"] .kb-item.aberto { color: #10231A; }
+/* Artigo aberto DENTRO da caixa de sugestões, sem trocar de tela. */
+.kb-corpo {
+  white-space: pre-wrap; background: var(--branco); border: 1px solid var(--verde);
+  border-top: none; border-radius: 0 0 var(--raio-sm) var(--raio-sm);
+  padding: 12px 14px; margin: -6px 0 8px; font-size: 13px; line-height: 1.55;
+  max-height: 300px; overflow-y: auto;
+}
+
+/* ---------- Painel de indicadores ---------- */
+.periodo { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.card {
+  background: var(--branco); border: 1px solid var(--linha); border-radius: var(--raio);
+  box-shadow: var(--sombra); padding: 16px 18px;
+}
+.card-num { font-size: 28px; font-weight: 700; letter-spacing: -.5px; line-height: 1.1; color: var(--verde); }
+.card-rot { font-size: 12px; color: var(--cinza); margin-top: 4px; }
+.card-alerta { border-color: var(--perigo); }
+.card-alerta .card-num { color: var(--perigo); }
+/* Barras horizontais (categoria, prioridade, carga por atendente) */
+.barras {
+  background: var(--branco); border: 1px solid var(--linha); border-radius: var(--raio);
+  box-shadow: var(--sombra); padding: 14px 18px;
+}
+.barra-linha { display: flex; align-items: center; gap: 12px; margin-bottom: 9px; }
+.barra-linha:last-child { margin-bottom: 0; }
+.barra-rot { flex: 0 0 132px; font-size: 12.5px; color: var(--cinza); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra-trilho { flex: 1; height: 10px; background: var(--fundo); border-radius: 999px; overflow: hidden; }
+.barra-fill { display: block; height: 100%; background: var(--verde); border-radius: 999px; }
+.barra-val { flex: none; font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--texto); min-width: 26px; text-align: right; }
+/* Série diária */
+.grafico {
+  background: var(--branco); border: 1px solid var(--linha); border-radius: var(--raio);
+  box-shadow: var(--sombra); padding: 14px 18px;
+}
+.grafico svg { width: 100%; height: 130px; display: block; }
+.grafico-legenda {
+  display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+  font-size: 11.5px; color: var(--cinza); margin-top: 8px;
+}
+.grafico-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.leg { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.leg-verde { background: var(--verde); }
+.leg-ouro { background: var(--ouro); }
+.grafico-datas { margin-left: auto; font-family: var(--mono); }
+/* Pill da nota de avaliação nos cartões da fila */
+.pill-nota { background: rgba(217, 179, 3, .16); color: var(--ouro-hover); letter-spacing: 1px; }
+[data-tema="escuro"] .pill-nota { color: var(--ouro); }
+
+/* ---------- Rodapé ---------- */
+.rodape {
+  text-align: center; color: var(--cinza-2); font-size: 11.5px;
+  padding: 26px 16px 10px;
+}
+
 /* ---------- Responsivo ---------- */
 @media (max-width: 860px) {
   .cartao { flex-wrap: wrap; align-items: flex-start; }
-  .c-lado { width: 100%; justify-content: flex-start; padding-top: 2px; }
+  /* Rodapé do cartão com fio, como no design mobile */
+  .c-lado { width: 100%; justify-content: flex-start; border-top: 1px solid var(--linha); padding-top: 10px; margin-top: 2px; }
+  .c-coment { order: 2; }
+  .c-lado .status-sel, .c-lado .pill.st-pendente, .c-lado .pill.st-em_andamento, .c-lado .pill.st-finalizado { order: 3; margin-left: auto; }
 }
 @media (max-width: 720px) {
-  .topo { height: auto; min-height: 64px; flex-wrap: wrap; padding: 10px 16px; gap: 10px; }
-  .topo-acoes { flex-wrap: wrap; row-gap: 8px; }
-  .quem { margin-left: 0; }
-  .topo-sep { display: none; }
   .campo-linha { grid-template-columns: 1fr; }
-  .painel { border-radius: 0; width: 100vw; }
 }
 
-/* ===================== Melhorias para celular =====================
-   Campos sem zoom automático do iOS e alvos de toque maiores. */
+/* ===================== Celular (design mobile-first) =====================
+   Bottom nav + FAB no lugar das abas e do botão do topo; busca acima dos
+   chips roláveis; folha de detalhe sobe de baixo (bottom-sheet). */
 @media (max-width: 768px) {
   input, select, textarea, .status-sel, .busca { font-size: 16px; }
-  .btn { min-height: 44px; padding: 11px 16px; }
-  .btn-mini { min-height: 34px; }
+  .btn { min-height: 46px; padding: 11px 18px; }
+  .btn-mini { min-height: 36px; padding: 7px 13px; }
   .btn-ico { width: 44px; height: 44px; }
-  .seg-btn { padding: 10px 14px; }
   .status-sel { padding: 9px 30px 9px 14px; }
-  .busca { min-width: 0; width: 100%; flex: 1 1 100%; }
+
+  /* Topbar compacta: marca + sino/tema/usuário; o CTA vira FAB */
+  .topo { padding: 10px 12px; height: auto; min-height: 64px; gap: 8px; }
+  #btn-novo { display: none; }
+  .topo-sep { display: none; }
+  .marca { gap: 8px; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+  .marca-ico { width: 34px; height: 34px; }
+  .marca-titulo { font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+  /* A logo já diz "Brazil Transports": no celular o subtítulo só rouba espaço. */
+  .marca-sub { display: none; }
+  .topo-acoes { gap: 6px; flex: none; }
+  .btn-ico { width: 40px; height: 40px; }
+  .quem { gap: 6px; margin-left: 0; }
+  .quem-avatar { display: none; }
+  .quem .btn-mini { min-height: 34px; padding: 6px 11px; }
+  /* Em 390px o nome come o espaço do título do sistema, que é o que importa
+     na barra. Quem está logado se vê na tela toda; aqui fica só o "Sair". */
+  #quem-nome { display: none; }
+
+  /* Abas de topo saem; bottom nav entra */
+  .abas { display: none; }
+  .bnav { display: flex; }
+  .fab { display: inline-flex; }
+  .conteudo { padding: 16px 16px calc(140px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Busca em cima (largura total), chips roláveis abaixo */
+  .filtros { gap: 10px; }
+  .busca { order: -1; flex: 1 1 100%; min-width: 0; height: 48px; }
+  .seg { flex: 1 1 100%; overflow-x: auto; margin: 0 -16px; padding: 2px 16px; }
+
+  /* Botões de ação dos cartões de Home Office em largura total (design) */
+  .ho-cartao .c-lado .btn { width: 100%; }
+
+  /* Painel de indicadores: dois cartões por linha cabem bem em 390px */
+  .cards { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .card { padding: 13px 14px; }
+  .card-num { font-size: 23px; }
+  .barra-rot { flex: 0 0 96px; font-size: 11.5px; }
+  .grafico-datas { margin-left: 0; flex-basis: 100%; }
+
+  /* Folha de detalhe: bottom-sheet de tela quase cheia */
+  .painel {
+    top: 5dvh; right: 0; left: 0; bottom: 0; width: 100%;
+    border-radius: 16px 16px 0 0;
+    transform: translateY(108%);
+    box-shadow: 0 -12px 48px rgba(4, 12, 8, .35);
+  }
+  .painel.aberto { transform: translateY(0); }
+  .painel-topo { padding: 14px 16px; }
+  .painel-corpo { padding: 16px 16px 56px; }
+
+  /* Toasts acima da bottom nav e do FAB, senão a mensagem fica escondida. */
+  .aviso-wrap {
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+    left: 12px; right: 12px; transform: none; align-items: stretch;
+  }
+  .aviso { text-align: center; }
+  /* O FAB também é .btn: sem esta especificidade o padding daqui o achataria. */
+  .btn.fab { padding: 13px 20px; min-height: 52px; }
+
+  .rodape { display: none; }
 }
 @media (max-width: 520px) {
-  .conteudo { padding: 16px 12px 76px; }
-  .topo { padding: 10px 12px; }
-  .cartao { padding: 13px 14px; }
+  .cartao { padding: 14px; }
   .cartao.urgente { padding-left: 11px; }
-  #quem-nome { max-width: 92px; }
 }

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1560 600" role="img" aria-label="Brazil Transports">
+  <title>Brazil Transports</title>
+  <!-- Símbolo: folha verde entre o arco dourado (acima, à esquerda) e a
+       aba azul-marinho (abaixo, à direita). -->
+  <path fill="#E8B60E" d="M40 105h196C150 170 84 258 40 366z"/>
+  <path fill="#1E3A56" d="M455 452v103H262c50-52 116-88 193-103z"/>
+  <path fill="#14522F" d="M272 105h183v292c0 45-40 81-98 81h-40c-98 0-179-66-179-149 0-90 53-176 134-224z"/>
+  <!-- Marca nominal -->
+  <g fill="#14522F" font-family="Inter, 'Segoe UI', system-ui, Arial, sans-serif" font-weight="700" letter-spacing="-5">
+    <text x="540" y="258" font-size="190">Brazil</text>
+    <text x="540" y="478" font-size="190">Transports</text>
+  </g>
+</svg>

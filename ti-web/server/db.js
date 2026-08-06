@@ -83,9 +83,12 @@ if (!db) {
 if (!db.seq) db.seq = { usuario: db.usuarios.length, chamado: 0, notificacao: 0, comentario: 0 };
 if (!db.seq.comentario) db.seq.comentario = 0;
 if (!db.seq.homeoffice) db.seq.homeoffice = 0;
+if (!db.seq.artigo) db.seq.artigo = 0;
+if (!db.seq.anexo) db.seq.anexo = 0;
 if (!Array.isArray(db.sessoes)) db.sessoes = [];
 if (!Array.isArray(db.notificacoes)) db.notificacoes = [];
 if (!Array.isArray(db.homeoffice)) db.homeoffice = [];
+if (!Array.isArray(db.artigos)) db.artigos = []; // base de conhecimento
 
 // ---------------------------------------------------------------------------
 // Persistência atômica + snapshots.
@@ -189,6 +192,8 @@ function novoIdChamado() { return 'TI-' + String(++db.seq.chamado).padStart(6, '
 function novoIdNotificacao() { return 'N-' + String(++db.seq.notificacao).padStart(6, '0'); }
 function novoIdComentario() { return 'C-' + String(++db.seq.comentario).padStart(6, '0'); }
 function novoIdHomeOffice() { return 'HO-' + String(++db.seq.homeoffice).padStart(4, '0'); }
+function novoIdArtigo() { return 'KB-' + String(++db.seq.artigo).padStart(4, '0'); }
+function novoIdAnexo() { return 'A-' + String(++db.seq.anexo).padStart(6, '0'); }
 
 module.exports = {
   db,
@@ -209,4 +214,6 @@ module.exports = {
   novoIdNotificacao,
   novoIdComentario,
   novoIdHomeOffice,
+  novoIdArtigo,
+  novoIdAnexo,
 };

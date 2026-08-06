@@ -21,6 +21,9 @@ const d = require('./db');
 // Regras dos itens do Home Office — o mesmo arquivo que o navegador carrega,
 // para a conferência da tela e a do servidor não divergirem.
 const regrasHO = require('../regras-ho.js');
+// Avisos externos (e-mail SMTP / webhook WhatsApp) — opcionais, ver
+// ti-data/notificar-config.json. Falha de envio nunca derruba a requisição.
+const notificar = require('./notificar');
 
 const PORT = parseInt(process.env.PORT, 10) || 8085;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -84,6 +87,13 @@ function broadcast(evt) {
   }
 }
 
+// O SSE é um canal único para todos os navegadores: nunca mande o CONTEÚDO de
+// uma notificação por ele (avisos pessoais vazariam para quem está logado em
+// outra conta). Só o sinal — cada cliente recarrega pela API, que filtra.
+function avisarNovaNotificacao() {
+  broadcast({ tipo: 'notificacao' });
+}
+
 function notifyChange(recurso) {
   revision += 1;
   broadcast({ tipo: 'mudanca', rev: revision, recurso });
@@ -110,8 +120,12 @@ function publicoUsuario(u) {
   return {
     id: u.id, nome: u.nome, login: u.login, papel: u.papel,
     lider: !!u.lider, atende: podeAtenderChamado(u), criadoEm: u.criadoEm,
+    // Contatos para os avisos externos (e-mail/WhatsApp) — ver server/notificar.js.
+    email: u.email || null, celular: u.celular || null,
   };
 }
+// E-mail simples o bastante para uso interno (não vale a pena RFC completa).
+function emailValido(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v); }
 // Home Office: quem pode registrar saídas — líderes marcados pelo admin, TI e admin.
 function gestorHomeOffice(u) {
   return !!u && (u.papel === 'ti' || u.papel === 'admin' || !!u.lider);
@@ -126,6 +140,50 @@ function ehLider(u) {
 function acharChamado(id) {
   return d.db.chamados.find((c) => c.id === id) || null;
 }
+/*
+ * Molde único do chamado. TODA criação passa por aqui (fila normal e os dois
+ * chamados que o Home Office abre), senão nasce sem prazo de SLA e fica fora
+ * dos indicadores e da pill de prazo.
+ */
+function novoChamadoObj(usuario, campos) {
+  const c = {
+    id: d.novoIdChamado(),
+    criadoEm: d.agora(),
+    atualizadoEm: d.agora(),
+    solicitante: { id: usuario.id, nome: usuario.nome },
+    titulo: campos.titulo,
+    descricao: campos.descricao || '',
+    categoria: campos.categoria || 'outro',
+    prioridade: campos.prioridade || 'media',
+    urgente: !!campos.urgente,
+    status: 'pendente',
+    responsavel: null,
+    responsavelId: null,
+    finalizadoEm: null,
+    comentarios: [],
+    historico: [],
+    anexos: [],
+    avaliacao: null,
+    prazoSla: null,
+  };
+  c.prazoSla = prazoSla(c);
+  return c;
+}
+/*
+ * Gravação preguiçosa: para dados de pouco valor (contador de leituras de
+ * artigo), junta as alterações e grava uma vez a cada 30 s. Nada que precise
+ * sobreviver a uma queda imediata deve usar isto — para esses, d.flush().
+ */
+let flushAgendado = null;
+function agendarFlush() {
+  if (flushAgendado) return;
+  flushAgendado = setTimeout(() => {
+    flushAgendado = null;
+    try { d.flush(); } catch (e) { console.error('[Chamados TI] flush adiado falhou:', e.message); }
+  }, 30000);
+  flushAgendado.unref();
+}
+
 function historico(chamado, usuario, acao, detalhe) {
   chamado.historico.push({ em: d.agora(), por: usuario ? usuario.nome : 'sistema', acao, detalhe: detalhe || null });
   chamado.atualizadoEm = d.agora();
@@ -134,16 +192,54 @@ const STATUS_LABEL = { pendente: 'Pendente', em_andamento: 'Em andamento', final
 const PRIO_LABEL = { baixa: 'Baixa', media: 'Média', alta: 'Alta' };
 
 // ---------------------------------------------------------------------------
-// Notificações (para a TI / notificador de bandeja).
+// SLA — prazo-alvo de atendimento por prioridade (horas corridas). Urgente
+// passa na frente de tudo. O prazo é recalculado quando a prioridade ou a
+// urgência mudam (sempre a partir da abertura do chamado).
 // ---------------------------------------------------------------------------
-function criarNotificacao(tipo, chamado, titulo, mensagem) {
+const SLA_HORAS = { urgente: 4, alta: 24, media: 72, baixa: 120 };
+function slaHoras(chamado) {
+  return chamado.urgente ? SLA_HORAS.urgente : (SLA_HORAS[chamado.prioridade] || SLA_HORAS.media);
+}
+// O relógio do prazo conta da abertura — ou da reabertura, quando o chamado
+// voltou para a fila (senão nasceria vencido).
+function prazoSla(chamado) {
+  const inicio = Date.parse(chamado.reabertoEm || chamado.criadoEm);
+  return new Date(inicio + slaHoras(chamado) * 3600 * 1000).toISOString();
+}
+function dentroDoSla(chamado) {
+  if (chamado.status !== 'finalizado' || !chamado.finalizadoEm || !chamado.prazoSla) return null;
+  return Date.parse(chamado.finalizadoEm) <= Date.parse(chamado.prazoSla);
+}
+// Migração: chamados antigos ganham o prazo na primeira subida com SLA.
+{
+  let backfill = false;
+  for (const c of d.db.chamados) {
+    if (!c.prazoSla) { c.prazoSla = prazoSla(c); backfill = true; }
+    if (!Array.isArray(c.anexos)) { c.anexos = []; backfill = true; }
+  }
+  if (backfill) d.flush();
+}
+
+// Prazo (em dias) para o solicitante reabrir um chamado finalizado.
+const REABRIR_DIAS = 7;
+// Quantas vezes a avaliação de um chamado pode ser gravada (1 nota + correções).
+const AVALIACOES_MAX = 3;
+
+// ---------------------------------------------------------------------------
+// Notificações. Sem `para`, o aviso é da equipe de TI (sino da TI e
+// notificador de bandeja). Com `para: {id}`, é pessoal — aparece só no sino
+// daquele usuário (ex.: solicitante sabendo que o status do chamado mudou).
+// ---------------------------------------------------------------------------
+const NOTIF_MAX = 2000; // agora há avisos pessoais além dos da equipe
+function criarNotificacao(tipo, chamado, titulo, mensagem, para) {
   const n = {
     id: d.novoIdNotificacao(),
     em: d.agora(),
-    tipo, // 'novo_chamado' | 'status' | 'comentario'
+    tipo, // 'novo_chamado' | 'status' | 'comentario' | 'reaberto'
     chamadoId: chamado.id,
     titulo,
     mensagem,
+    para: para ? { id: para.id } : null,
     dados: {
       chamadoId: chamado.id,
       solicitante: chamado.solicitante.nome,
@@ -155,13 +251,44 @@ function criarNotificacao(tipo, chamado, titulo, mensagem) {
     reconhecidaPor: null,
   };
   d.db.notificacoes.push(n);
-  if (d.db.notificacoes.length > 500) d.db.notificacoes = d.db.notificacoes.slice(-400);
-  broadcast({ tipo: 'notificacao', notificacao: n });
+  /*
+   * Poda pelo teto. O que já foi lido sai primeiro; aviso PENDENTE só é
+   * descartado se, sozinho, ele já estourar o limite — e aí sai o mais antigo.
+   * A ordem importa: cortar por posição (como antes) deixava qualquer usuário
+   * empurrar para fora um alerta urgente que a TI ainda não tinha visto.
+   */
+  if (d.db.notificacoes.length > NOTIF_MAX) {
+    const pendentes = d.db.notificacoes.filter((x) => !x.reconhecidaPor);
+    const lidas = d.db.notificacoes.filter((x) => x.reconhecidaPor);
+    const sobra = Math.max(0, NOTIF_MAX - pendentes.length);
+    d.db.notificacoes = lidas.slice(-sobra)
+      .concat(pendentes.slice(-NOTIF_MAX))
+      .sort((a, b) => (a.em < b.em ? -1 : 1));
+  }
+  avisarNovaNotificacao();
   return n;
+}
+
+// Aviso pessoal ao solicitante do chamado (sino + e-mail/webhook, se ligados).
+// Nunca avisa quem causou o evento sobre a própria ação.
+function avisarSolicitante(chamado, autor, tipo, titulo, mensagem) {
+  const dono = d.db.usuarios.find((u) => u.id === chamado.solicitante.id);
+  if (!dono || (autor && dono.id === autor.id)) return;
+  criarNotificacao(tipo, chamado, titulo, mensagem, dono);
+  notificar.avisar(dono, tipo, titulo, mensagem, chamado.id);
+}
+
+// A notificação é visível para este usuário? Aviso da equipe: quem atende
+// (admin, TI e os logins autorizados). Aviso pessoal: só o destinatário.
+function notificacaoVisivel(n, u) {
+  if (n.para) return n.para.id === u.id;
+  return podeAtenderChamado(u);
 }
 
 function reconhecerNotificacoesDoChamado(chamadoId, usuario, tipos) {
   for (const n of d.db.notificacoes) {
+    // Só os avisos da equipe: os pessoais são lidos pelo próprio destinatário.
+    if (n.para) continue;
     if (n.chamadoId === chamadoId && !n.reconhecidaPor && (!tipos || tipos.includes(n.tipo))) {
       n.reconhecidaPor = { id: usuario ? usuario.id : 'sistema', nome: usuario ? usuario.nome : 'sistema', em: d.agora() };
     }
@@ -244,8 +371,12 @@ rota('POST', '/api/usuarios', ['admin'], (ctx) => {
   if (senha.length < 6) return erro(ctx.res, 400, 'A senha precisa ter ao menos 6 caracteres.');
   if (!PAPEIS.includes(papel)) return erro(ctx.res, 400, 'Papel inválido.');
   if (d.db.usuarios.some((u) => u.login === login)) return erro(ctx.res, 409, 'Já existe um usuário com esse login.');
+  const email = txt(ctx.body.email, 120).toLowerCase();
+  if (email && !emailValido(email)) return erro(ctx.res, 400, 'E-mail inválido.');
   const u = d.criarUsuarioObj(nome, login, senha, papel);
   u.lider = !!ctx.body.lider;
+  u.email = email || null;
+  u.celular = txt(ctx.body.celular, 25) || null;
   d.db.usuarios.push(u);
   d.flush();
   notifyChange('usuarios');
@@ -270,9 +401,27 @@ rota('PUT', '/api/usuarios/:id', ['admin'], (ctx) => {
     u.senhaHash = d.hashSenha(String(ctx.body.novaSenha), u.sal);
   }
   if (ctx.body.lider !== undefined) u.lider = !!ctx.body.lider;
+  if (ctx.body.email !== undefined) {
+    const email = txt(ctx.body.email, 120).toLowerCase();
+    if (email && !emailValido(email)) return erro(ctx.res, 400, 'E-mail inválido.');
+    u.email = email || null;
+  }
+  if (ctx.body.celular !== undefined) u.celular = txt(ctx.body.celular, 25) || null;
   d.flush();
   notifyChange('usuarios');
   sendJson(ctx.res, 200, { usuario: publicoUsuario(u) });
+});
+
+// Cada um edita os próprios contatos (para receber os avisos).
+rota('PUT', '/api/me/contato', null, (ctx) => {
+  if (ctx.body.email !== undefined) {
+    const email = txt(ctx.body.email, 120).toLowerCase();
+    if (email && !emailValido(email)) return erro(ctx.res, 400, 'E-mail inválido.');
+    ctx.usuario.email = email || null;
+  }
+  if (ctx.body.celular !== undefined) ctx.usuario.celular = txt(ctx.body.celular, 25) || null;
+  d.flush();
+  sendJson(ctx.res, 200, { usuario: publicoUsuario(ctx.usuario) });
 });
 
 rota('DELETE', '/api/usuarios/:id', ['admin'], (ctx) => {
@@ -304,24 +453,14 @@ rota('POST', '/api/chamados', null, (ctx) => {
   const urgente = !!ctx.body.urgente;
   if (!titulo) return erro(ctx.res, 400, 'Informe o título do chamado.');
 
-  const chamado = {
-    id: d.novoIdChamado(),
-    criadoEm: d.agora(),
-    atualizadoEm: d.agora(),
-    solicitante: { id: ctx.usuario.id, nome: ctx.usuario.nome },
-    titulo,
-    descricao,
-    categoria,
-    prioridade,
-    urgente,
-    status: 'pendente',
-    responsavel: null,
-    finalizadoEm: null,
-    comentarios: [],
-    historico: [],
-  };
+  const chamado = novoChamadoObj(ctx.usuario, { titulo, descricao, categoria, prioridade, urgente });
+  // Fotos da abertura: conferidas antes de gravar o chamado, para uma imagem
+  // ruim não deixar chamado pela metade nem arquivo solto em disco.
+  const conf = conferirAnexos(chamado, ctx.body.anexos);
+  if (conf.erro) return erro(ctx.res, 400, conf.erro);
   historico(chamado, ctx.usuario, 'Chamado aberto.',
     'Prioridade ' + PRIO_LABEL[prioridade] + (urgente ? ' · URGENTE' : ''));
+  gravarAnexos(chamado, ctx.usuario, conf.imagens, null);
   d.db.chamados.push(chamado);
   // Notifica a TI apenas quando quem abriu NÃO atende (a própria TI e os
   // atendentes não precisam de aviso sobre o que eles mesmos registram).
@@ -377,17 +516,24 @@ rota('PUT', '/api/chamados/:id', null, (ctx) => {
         ctx.usuario.nome + ' mudou o status para ' + STATUS_LABEL[b.status] + ' · ' + chamado.titulo);
     }
     if (b.status === 'finalizado') reconhecerNotificacoesDoChamado(chamado.id, ctx.usuario, null);
+    // O solicitante fica sabendo (sino; e-mail/webhook se ligados).
+    avisarSolicitante(chamado, ctx.usuario, 'status',
+      chamado.id + ' — ' + STATUS_LABEL[b.status],
+      'Seu chamado "' + chamado.titulo + '" mudou para ' + STATUS_LABEL[b.status] +
+        (b.status === 'finalizado' ? '. Se o problema persistir, você pode reabri-lo em até ' + REABRIR_DIAS + ' dias. Avalie o atendimento na tela do chamado.' : '.'));
     mudou = true;
   }
   if (b.prioridade !== undefined && b.prioridade !== chamado.prioridade) {
     if (!PRIORIDADES.includes(b.prioridade)) return erro(ctx.res, 400, 'Prioridade inválida.');
     historico(chamado, ctx.usuario, 'Prioridade alterada.', PRIO_LABEL[chamado.prioridade] + ' → ' + PRIO_LABEL[b.prioridade]);
     chamado.prioridade = b.prioridade;
+    chamado.prazoSla = prazoSla(chamado);
     mudou = true;
   }
   if (b.urgente !== undefined && !!b.urgente !== chamado.urgente) {
     chamado.urgente = !!b.urgente;
     historico(chamado, ctx.usuario, chamado.urgente ? 'Marcado como URGENTE.' : 'Urgência removida.');
+    chamado.prazoSla = prazoSla(chamado);
     mudou = true;
   }
   if (b.responsavel !== undefined) {
@@ -395,6 +541,10 @@ rota('PUT', '/api/chamados/:id', null, (ctx) => {
     if (r !== chamado.responsavel) {
       historico(chamado, ctx.usuario, 'Responsável definido.', r || '(ninguém)');
       chamado.responsavel = r;
+      // O vínculo por id vale para o nome antigo: limpa (quem quiser o id usa
+      // POST /atribuir, que grava os dois campos juntos).
+      const porNome = r ? d.db.usuarios.find((u) => u.nome === r && podeAtenderChamado(u)) : null;
+      chamado.responsavelId = porNome ? porNome.id : null;
       mudou = true;
     }
   }
@@ -432,6 +582,10 @@ rota('POST', '/api/chamados/:id/comentarios', null, (ctx) => {
   if (!chamado) return erro(ctx.res, 404, 'Chamado não encontrado.');
   const texto = txt(ctx.body.texto, 2000);
   if (!texto) return erro(ctx.res, 400, 'Escreva a observação.');
+  // Confere as fotos ANTES de gravar o comentário: uma imagem recusada não
+  // pode deixar a observação registrada com um erro 400 na tela do usuário.
+  const conf = conferirAnexos(chamado, ctx.body.anexos);
+  if (conf.erro) return erro(ctx.res, 400, conf.erro);
   const comentario = {
     id: d.novoIdComentario(),
     em: d.agora(),
@@ -440,14 +594,429 @@ rota('POST', '/api/chamados/:id/comentarios', null, (ctx) => {
   };
   chamado.comentarios.push(comentario);
   historico(chamado, ctx.usuario, 'Observação adicionada.', texto.slice(0, 120));
+  gravarAnexos(chamado, ctx.usuario, conf.imagens, comentario.id);
   if (!podeAtenderChamado(ctx.usuario)) {
     criarNotificacao('comentario', chamado,
       'Nova observação — ' + chamado.id,
       ctx.usuario.nome + ': ' + texto.slice(0, 140) + ' · ' + chamado.titulo);
   }
+  // Observação da TI avisa o solicitante (e vice-versa já cai na regra acima).
+  avisarSolicitante(chamado, ctx.usuario, 'comentario',
+    chamado.id + ' — nova observação',
+    ctx.usuario.nome + ' escreveu no seu chamado "' + chamado.titulo + '": ' + texto.slice(0, 400));
   d.flush();
   notifyChange('chamados');
   sendJson(ctx.res, 200, { comentario, chamado });
+});
+
+// ---- anexos (fotos do problema) ---------------------------------------------
+// Guardados em ti-data/anexos (fora da pasta estática) e servidos por rota
+// autenticada, igual à foto da devolução de Home Office.
+const ANEXOS_DIR = path.join(d.DATA_DIR, 'anexos');
+fs.mkdirSync(ANEXOS_DIR, { recursive: true });
+const ANEXOS_MAX = 5;          // por envio
+const ANEXOS_TOTAL = 20;       // por chamado
+const ANEXO_BYTES = 6 * 1024 * 1024;
+const IMG_MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+
+/*
+ * Confere a lista inteira ANTES de gravar qualquer coisa: assim uma imagem
+ * ruim no meio do lote não deixa comentário meio-gravado nem arquivo órfão em
+ * disco. Devolve { erro } ou { imagens: [{buf, ext}] }.
+ */
+function conferirAnexos(chamado, lista) {
+  const imagens = [];
+  const jaTem = Array.isArray(chamado.anexos) ? chamado.anexos.length : 0;
+  if (!Array.isArray(lista) || !lista.length) return { imagens };
+  if (lista.length > ANEXOS_MAX) return { erro: 'Envie no máximo ' + ANEXOS_MAX + ' imagens por vez.' };
+  if (jaTem + lista.length > ANEXOS_TOTAL) {
+    return { erro: 'Este chamado chegou ao limite de ' + ANEXOS_TOTAL + ' anexos.' };
+  }
+  for (const dataUrl of lista) {
+    const m = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+    if (!m) return { erro: 'Anexo inválido: envie uma imagem (JPG, PNG ou WebP).' };
+    const buf = Buffer.from(m[2], 'base64');
+    if (!buf.length || buf.length > ANEXO_BYTES) return { erro: 'Cada imagem deve ter até 6 MB.' };
+    imagens.push({ buf, ext: m[1] === 'png' ? 'png' : m[1] === 'webp' ? 'webp' : 'jpg' });
+  }
+  return { imagens };
+}
+
+// Grava no disco o que conferirAnexos já aprovou e anexa ao chamado.
+function gravarAnexos(chamado, usuario, imagens, comentarioId) {
+  if (!Array.isArray(chamado.anexos)) chamado.anexos = [];
+  const salvos = [];
+  for (const img of imagens) {
+    const id = d.novoIdAnexo();
+    const arquivo = chamado.id + '-' + id + '.' + img.ext;
+    fs.writeFileSync(path.join(ANEXOS_DIR, arquivo), img.buf);
+    const anexo = {
+      id,
+      arquivo,
+      em: d.agora(),
+      por: { id: usuario.id, nome: usuario.nome },
+      comentarioId: comentarioId || null,
+      bytes: img.buf.length,
+    };
+    chamado.anexos.push(anexo);
+    salvos.push(anexo);
+  }
+  return salvos;
+}
+
+rota('POST', '/api/chamados/:id/anexos', null, (ctx) => {
+  const chamado = acharChamado(ctx.params.id);
+  if (!chamado) return erro(ctx.res, 404, 'Chamado não encontrado.');
+  const lista = Array.isArray(ctx.body.anexos) ? ctx.body.anexos : [ctx.body.imagem].filter(Boolean);
+  if (!lista.length) return erro(ctx.res, 400, 'Nenhuma imagem enviada.');
+  const conf = conferirAnexos(chamado, lista);
+  if (conf.erro) return erro(ctx.res, 400, conf.erro);
+  const salvos = gravarAnexos(chamado, ctx.usuario, conf.imagens, txt(ctx.body.comentarioId, 20) || null);
+  historico(chamado, ctx.usuario, salvos.length === 1 ? 'Anexo adicionado.' : salvos.length + ' anexos adicionados.', null);
+  d.flush();
+  notifyChange('chamados');
+  sendJson(ctx.res, 200, { anexos: salvos, chamado });
+});
+
+// Qualquer usuário autenticado baixa o anexo — a mesma regra do chamado, que
+// é público para todos (GET /api/chamados devolve a fila inteira, com as
+// descrições). O anexo é parte do chamado; restringir só a foto daria uma
+// falsa sensação de sigilo. Sem sessão válida, 401 no despacho.
+rota('GET', '/api/chamados/:id/anexos/:anexoId', null, (ctx) => {
+  const chamado = acharChamado(ctx.params.id);
+  if (!chamado) return erro(ctx.res, 404, 'Chamado não encontrado.');
+  const anexo = (chamado.anexos || []).find((a) => a.id === ctx.params.anexoId);
+  if (!anexo) return erro(ctx.res, 404, 'Anexo não encontrado.');
+  const arquivo = path.basename(anexo.arquivo);
+  fs.readFile(path.join(ANEXOS_DIR, arquivo), (err, dados) => {
+    if (err) return erro(ctx.res, 404, 'Arquivo não encontrado no servidor.');
+    const ext = path.extname(arquivo).slice(1).toLowerCase();
+    send(ctx.res, 200, dados, { 'Content-Type': IMG_MIME[ext] || 'application/octet-stream' });
+  });
+});
+
+rota('DELETE', '/api/chamados/:id/anexos/:anexoId', null, (ctx) => {
+  const chamado = acharChamado(ctx.params.id);
+  if (!chamado) return erro(ctx.res, 404, 'Chamado não encontrado.');
+  const anexo = (chamado.anexos || []).find((a) => a.id === ctx.params.anexoId);
+  if (!anexo) return erro(ctx.res, 404, 'Anexo não encontrado.');
+  // Quem anexou pode remover; a TI e o admin também.
+  if (anexo.por.id !== ctx.usuario.id && !podeAtenderChamado(ctx.usuario)) {
+    return erro(ctx.res, 403, 'Só quem anexou (ou a TI) pode remover o anexo.');
+  }
+  try { fs.unlinkSync(path.join(ANEXOS_DIR, path.basename(anexo.arquivo))); } catch (e) { /* ignore */ }
+  chamado.anexos = chamado.anexos.filter((a) => a.id !== anexo.id);
+  historico(chamado, ctx.usuario, 'Anexo removido.', null);
+  d.flush();
+  notifyChange('chamados');
+  sendJson(ctx.res, 200, { ok: true, chamado });
+});
+
+// ---- avaliação do atendimento ------------------------------------------------
+// Só o solicitante avalia, e só depois de finalizado. Pode reavaliar enquanto
+// o chamado seguir finalizado — o histórico guarda cada nota.
+rota('POST', '/api/chamados/:id/avaliacao', null, (ctx) => {
+  const chamado = acharChamado(ctx.params.id);
+  if (!chamado) return erro(ctx.res, 404, 'Chamado não encontrado.');
+  if (chamado.solicitante.id !== ctx.usuario.id) return erro(ctx.res, 403, 'Só quem abriu o chamado avalia o atendimento.');
+  if (chamado.status !== 'finalizado') return erro(ctx.res, 400, 'A avaliação fica disponível quando o chamado é finalizado.');
+  const nota = parseInt(ctx.body.nota, 10);
+  if (!(nota >= 1 && nota <= 5)) return erro(ctx.res, 400, 'Dê uma nota de 1 a 5 estrelas.');
+  const comentario = txt(ctx.body.comentario, 500);
+  const antes = chamado.avaliacao;
+  // Reenviar a MESMA avaliação (duplo clique, recarregar a tela) não muda nada.
+  if (antes && antes.nota === nota && (antes.comentario || '') === comentario) {
+    return sendJson(ctx.res, 200, { chamado });
+  }
+  // Corrigir é permitido, mas com teto: sem ele, um laço de reavaliações
+  // encheria o histórico e a fila de avisos da TI (cada envio grava a base).
+  chamado.avaliacoesFeitas = (chamado.avaliacoesFeitas || 0) + 1;
+  if (chamado.avaliacoesFeitas > AVALIACOES_MAX) {
+    chamado.avaliacoesFeitas = AVALIACOES_MAX;
+    return erro(ctx.res, 400, 'Você já corrigiu esta avaliação o máximo de vezes. Fale com a TI pelas observações.');
+  }
+  chamado.avaliacao = { nota, comentario: comentario || null, em: d.agora(), por: { id: ctx.usuario.id, nome: ctx.usuario.nome } };
+  historico(chamado, ctx.usuario, antes ? 'Avaliação corrigida.' : 'Atendimento avaliado.',
+    (antes ? antes.nota + '/5 → ' : '') + nota + '/5' + (comentario ? ' — ' + comentario.slice(0, 100) : ''));
+  // Só a PRIMEIRA avaliação vira aviso na fila da TI; correções ficam no
+  // histórico do chamado, que é onde a TI vai olhar de todo jeito.
+  if (!antes) {
+    criarNotificacao('avaliacao', chamado,
+      'Avaliação ' + nota + '/5 — ' + chamado.id,
+      ctx.usuario.nome + ' avaliou o atendimento com ' + nota + ' de 5' + (comentario ? ': ' + comentario.slice(0, 140) : '') + ' · ' + chamado.titulo);
+  }
+  d.flush();
+  notifyChange('chamados');
+  sendJson(ctx.res, 200, { chamado });
+});
+
+// ---- reabertura controlada ---------------------------------------------------
+// O solicitante reabre em até REABRIR_DIAS dias após a finalização, mantendo
+// todo o histórico. A TI reabre a qualquer momento (é ela quem manda no estado).
+rota('POST', '/api/chamados/:id/reabrir', null, (ctx) => {
+  const chamado = acharChamado(ctx.params.id);
+  if (!chamado) return erro(ctx.res, 404, 'Chamado não encontrado.');
+  if (chamado.status !== 'finalizado') return erro(ctx.res, 400, 'Este chamado não está finalizado.');
+  const dono = chamado.solicitante.id === ctx.usuario.id;
+  const atende = podeAtenderChamado(ctx.usuario);
+  if (!dono && !atende) return erro(ctx.res, 403, 'Só quem abriu o chamado (ou a TI) pode reabri-lo.');
+  if (dono && !atende) {
+    const dias = (Date.now() - Date.parse(chamado.finalizadoEm || chamado.atualizadoEm)) / 86400000;
+    if (dias > REABRIR_DIAS) {
+      return erro(ctx.res, 400, 'O prazo de ' + REABRIR_DIAS + ' dias para reabrir passou. Abra um novo chamado.');
+    }
+  }
+  const motivo = txt(ctx.body.motivo, 1000);
+  if (!motivo) return erro(ctx.res, 400, 'Diga o que continua acontecendo para a TI entender.');
+  chamado.status = 'pendente';
+  chamado.finalizadoEm = null;
+  chamado.reabertoEm = d.agora();
+  chamado.reaberturas = (chamado.reaberturas || 0) + 1;
+  // Prazo novo a partir da REABERTURA: senão o chamado volta para a fila já
+  // vencido (o prazo original contava da abertura, semanas atrás).
+  chamado.prazoSla = new Date(Date.parse(chamado.reabertoEm) + slaHoras(chamado) * 3600 * 1000).toISOString();
+  chamado.comentarios.push({
+    id: d.novoIdComentario(),
+    em: d.agora(),
+    por: { id: ctx.usuario.id, nome: ctx.usuario.nome, papel: ctx.usuario.papel },
+    texto: 'Chamado reaberto: ' + motivo,
+  });
+  historico(chamado, ctx.usuario, 'Chamado reaberto.', motivo.slice(0, 120));
+  criarNotificacao('reaberto', chamado,
+    'Chamado reaberto — ' + chamado.id,
+    ctx.usuario.nome + ' reabriu: ' + motivo.slice(0, 140) + ' · ' + chamado.titulo);
+  avisarSolicitante(chamado, ctx.usuario, 'reaberto',
+    chamado.id + ' — reaberto',
+    'Seu chamado "' + chamado.titulo + '" foi reaberto por ' + ctx.usuario.nome + ': ' + motivo.slice(0, 300));
+  d.flush();
+  notifyChange('chamados');
+  sendJson(ctx.res, 200, { chamado });
+});
+
+// ---- atribuição de responsável ----------------------------------------------
+// "Assumir" (sem corpo) ou atribuir a um usuário que atende (responsavelId).
+rota('POST', '/api/chamados/:id/atribuir', null, (ctx) => {
+  const chamado = acharChamado(ctx.params.id);
+  if (!chamado) return erro(ctx.res, 404, 'Chamado não encontrado.');
+  if (!podeAtenderChamado(ctx.usuario)) return erro(ctx.res, 403, 'Apenas a TI atribui responsável.');
+  let alvo = ctx.usuario;
+  if (ctx.body.responsavelId) {
+    const u = d.db.usuarios.find((x) => x.id === ctx.body.responsavelId);
+    if (!u) return erro(ctx.res, 404, 'Usuário não encontrado.');
+    if (!podeAtenderChamado(u)) return erro(ctx.res, 400, 'Esse usuário não faz atendimento.');
+    alvo = u;
+  } else if (ctx.body.responsavelId === null) {
+    // Liberar o chamado (voltar para a fila sem dono).
+    if (chamado.responsavel) historico(chamado, ctx.usuario, 'Responsável removido.', chamado.responsavel);
+    chamado.responsavel = null;
+    chamado.responsavelId = null;
+    d.flush();
+    notifyChange('chamados');
+    return sendJson(ctx.res, 200, { chamado });
+  }
+  chamado.responsavel = alvo.nome;
+  chamado.responsavelId = alvo.id;
+  if (chamado.status === 'pendente') {
+    chamado.status = 'em_andamento';
+    historico(chamado, ctx.usuario, 'Status alterado.', 'Pendente → Em andamento');
+  }
+  historico(chamado, ctx.usuario, 'Responsável definido.', alvo.nome);
+  avisarSolicitante(chamado, ctx.usuario, 'status',
+    chamado.id + ' — em atendimento',
+    'Seu chamado "' + chamado.titulo + '" está sendo atendido por ' + alvo.nome + '.');
+  d.flush();
+  notifyChange('chamados');
+  sendJson(ctx.res, 200, { chamado });
+});
+
+// Quem pode receber atribuição (para o seletor da tela).
+rota('GET', '/api/atendentes', null, (ctx) => {
+  const lista = d.db.usuarios.filter(podeAtenderChamado)
+    .map((u) => ({ id: u.id, nome: u.nome }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  sendJson(ctx.res, 200, { atendentes: lista });
+});
+
+// ---- indicadores / relatórios ------------------------------------------------
+// Números do período (padrão: 30 dias) para o painel do gestor. Aberto a
+// qualquer usuário autenticado — a fila já é pública para todos.
+rota('GET', '/api/relatorios', null, (ctx) => {
+  const dias = Math.min(Math.max(parseInt(ctx.query.get('dias'), 10) || 30, 1), 365);
+  // Período = os N dias do calendário local terminando hoje. Começar num
+  // instante "agora - N dias" faria o KPI contar um pedaço de um dia a mais do
+  // que o gráfico mostra, e os dois números nunca fechariam.
+  const inicio = new Date();
+  inicio.setHours(0, 0, 0, 0);
+  inicio.setDate(inicio.getDate() - (dias - 1));
+  const desde = inicio.getTime();
+  const noPeriodo = d.db.chamados.filter((c) => Date.parse(c.criadoEm) >= desde);
+  // "Finalizados no período" conta pela data de FECHAMENTO — é o trabalho que
+  // a TI entregou nesses dias. Contar pela abertura esconderia justamente os
+  // chamados antigos que demoraram (e que puxam o tempo médio para cima).
+  const finalizados = d.db.chamados.filter((c) =>
+    c.status === 'finalizado' && c.finalizadoEm && Date.parse(c.finalizadoEm) >= desde);
+
+  const somaHoras = finalizados.reduce((s, c) => s + (Date.parse(c.finalizadoEm) - Date.parse(c.criadoEm)) / 3600000, 0);
+  const comSla = finalizados.filter((c) => dentroDoSla(c) !== null);
+  const dentro = comSla.filter((c) => dentroDoSla(c) === true).length;
+  const avaliados = noPeriodo.filter((c) => c.avaliacao && c.avaliacao.nota);
+  const somaNotas = avaliados.reduce((s, c) => s + c.avaliacao.nota, 0);
+
+  const contar = (chave) => {
+    const mapa = {};
+    for (const c of noPeriodo) {
+      const k = typeof chave === 'function' ? chave(c) : c[chave];
+      if (k == null) continue;
+      mapa[k] = (mapa[k] || 0) + 1;
+    }
+    return mapa;
+  };
+  // Série por dia (aberturas x finalizações), do mais antigo ao mais recente.
+  // O dia é o LOCAL do servidor (-03:00): fatiar o ISO em UTC jogaria tudo o
+  // que foi aberto depois das 21h para o dia seguinte.
+  const porDia = {};
+  const diaDe = (iso) => {
+    const dt = new Date(iso);
+    const p = (n) => String(n).padStart(2, '0');
+    return dt.getFullYear() + '-' + p(dt.getMonth() + 1) + '-' + p(dt.getDate());
+  };
+  for (let i = 0; i < dias; i++) {
+    const dt = new Date(inicio);
+    dt.setDate(inicio.getDate() + i);
+    porDia[diaDe(dt)] = { abertos: 0, finalizados: 0 };
+  }
+  for (const c of noPeriodo) {
+    const k = diaDe(c.criadoEm);
+    if (porDia[k]) porDia[k].abertos += 1;
+  }
+  for (const c of d.db.chamados) {
+    if (!c.finalizadoEm || Date.parse(c.finalizadoEm) < desde) continue;
+    const k = diaDe(c.finalizadoEm);
+    if (porDia[k]) porDia[k].finalizados += 1;
+  }
+
+  // Carga por atendente (quem está com chamado aberto na mão hoje).
+  const abertosAgora = d.db.chamados.filter((c) => c.status !== 'finalizado');
+  const porResponsavel = {};
+  for (const c of abertosAgora) {
+    const k = c.responsavel || '— sem responsável';
+    porResponsavel[k] = (porResponsavel[k] || 0) + 1;
+  }
+
+  sendJson(ctx.res, 200, {
+    periodoDias: dias,
+    total: noPeriodo.length,          // abertos NO período (bate com o gráfico)
+    abertos: noPeriodo.filter((c) => c.status !== 'finalizado').length,
+    finalizados: finalizados.length,  // fechados no período
+    urgentes: noPeriodo.filter((c) => c.urgente).length,
+    reaberturas: noPeriodo.reduce((s, c) => s + (c.reaberturas || 0), 0),
+    emAbertoTotal: abertosAgora.length,
+    // Fora do prazo AGORA (chamados abertos que já passaram do SLA).
+    atrasados: abertosAgora.filter((c) => c.prazoSla && Date.parse(c.prazoSla) < Date.now()).length,
+    tempoMedioHoras: finalizados.length ? Number((somaHoras / finalizados.length).toFixed(1)) : null,
+    slaPercentual: comSla.length ? Math.round((dentro / comSla.length) * 100) : null,
+    slaAvaliados: comSla.length,
+    notaMedia: avaliados.length ? Number((somaNotas / avaliados.length).toFixed(1)) : null,
+    avaliacoes: avaliados.length,
+    porCategoria: contar('categoria'),
+    porPrioridade: contar('prioridade'),
+    porStatus: contar('status'),
+    porResponsavel,
+    porDia,
+  });
+});
+
+// ---- base de conhecimento ----------------------------------------------------
+// Artigos curtos que a TI escreve; a tela de novo chamado sugere os que casam
+// com o título digitado, para o colaborador se resolver sem abrir chamado.
+function publicoArtigo(a) { return a; }
+
+rota('GET', '/api/artigos', null, (ctx) => {
+  const busca = txt(ctx.query.get('busca'), 120).toLowerCase();
+  let lista = d.db.artigos.slice();
+  if (busca) {
+    // Casamento por palavra: cada termo com 3+ letras vale 1 ponto no título,
+    // meio ponto no corpo/etiquetas. Sem acento nem caixa.
+    const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    let termos = norm(busca).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
+    // Busca só com palavras curtas ("vpn" já entra acima, mas "ti" ou "erp?"
+    // não): usa o texto inteiro como termo, em vez de devolver a base toda.
+    if (!termos.length) termos = [norm(busca).replace(/[^a-z0-9]+/g, '')].filter(Boolean);
+    if (termos.length) {
+      lista = lista.map((a) => {
+        const t = norm(a.titulo), c = norm(a.conteudo), e = norm((a.etiquetas || []).join(' '));
+        let peso = 0;
+        for (const termo of termos) {
+          if (t.includes(termo)) peso += 1;
+          if (e.includes(termo)) peso += 0.5;
+          if (c.includes(termo)) peso += 0.5;
+        }
+        return { a, peso };
+      }).filter((x) => x.peso > 0).sort((x, y) => y.peso - x.peso).map((x) => x.a);
+    } else {
+      lista = []; // busca só com pontuação: nada casa
+    }
+  }
+  lista = lista.sort((a, b) => (busca ? 0 : (b.vistas || 0) - (a.vistas || 0)));
+  sendJson(ctx.res, 200, { artigos: lista.slice(0, 30).map(publicoArtigo) });
+});
+
+rota('GET', '/api/artigos/:id', null, (ctx) => {
+  const a = d.db.artigos.find((x) => x.id === ctx.params.id);
+  if (!a) return erro(ctx.res, 404, 'Artigo não encontrado.');
+  // Contador de leituras não justifica reescrever a base inteira a cada
+  // abertura: soma em memória e o gravador preguiçoso persiste depois.
+  a.vistas = (a.vistas || 0) + 1;
+  agendarFlush();
+  sendJson(ctx.res, 200, { artigo: publicoArtigo(a) });
+});
+
+rota('POST', '/api/artigos', null, (ctx) => {
+  if (!podeAtenderChamado(ctx.usuario)) return erro(ctx.res, 403, 'Apenas a TI escreve artigos.');
+  const titulo = txt(ctx.body.titulo, 140);
+  const conteudo = txt(ctx.body.conteudo, 8000);
+  if (!titulo || !conteudo) return erro(ctx.res, 400, 'Informe título e conteúdo do artigo.');
+  const artigo = {
+    id: d.novoIdArtigo(),
+    titulo,
+    conteudo,
+    categoria: CATEGORIAS.includes(ctx.body.categoria) ? ctx.body.categoria : 'outro',
+    etiquetas: String(ctx.body.etiquetas || '').split(',').map((t) => txt(t, 30)).filter(Boolean).slice(0, 10),
+    criadoEm: d.agora(),
+    atualizadoEm: d.agora(),
+    por: { id: ctx.usuario.id, nome: ctx.usuario.nome },
+    vistas: 0,
+  };
+  d.db.artigos.push(artigo);
+  d.flush();
+  notifyChange('artigos');
+  sendJson(ctx.res, 200, { artigo });
+});
+
+rota('PUT', '/api/artigos/:id', null, (ctx) => {
+  if (!podeAtenderChamado(ctx.usuario)) return erro(ctx.res, 403, 'Apenas a TI edita artigos.');
+  const a = d.db.artigos.find((x) => x.id === ctx.params.id);
+  if (!a) return erro(ctx.res, 404, 'Artigo não encontrado.');
+  if (ctx.body.titulo !== undefined) a.titulo = txt(ctx.body.titulo, 140) || a.titulo;
+  if (ctx.body.conteudo !== undefined) a.conteudo = txt(ctx.body.conteudo, 8000) || a.conteudo;
+  if (ctx.body.categoria !== undefined && CATEGORIAS.includes(ctx.body.categoria)) a.categoria = ctx.body.categoria;
+  if (ctx.body.etiquetas !== undefined) {
+    a.etiquetas = String(ctx.body.etiquetas || '').split(',').map((t) => txt(t, 30)).filter(Boolean).slice(0, 10);
+  }
+  a.atualizadoEm = d.agora();
+  d.flush();
+  notifyChange('artigos');
+  sendJson(ctx.res, 200, { artigo: a });
+});
+
+rota('DELETE', '/api/artigos/:id', null, (ctx) => {
+  if (!podeAtenderChamado(ctx.usuario)) return erro(ctx.res, 403, 'Apenas a TI remove artigos.');
+  const a = d.db.artigos.find((x) => x.id === ctx.params.id);
+  if (!a) return erro(ctx.res, 404, 'Artigo não encontrado.');
+  d.db.artigos = d.db.artigos.filter((x) => x.id !== a.id);
+  d.flush();
+  notifyChange('artigos');
+  sendJson(ctx.res, 200, { ok: true });
 });
 
 // ---- histórico geral (detecção de mudanças feitas no site) ------------------
@@ -466,19 +1035,44 @@ rota('GET', '/api/historico', null, (ctx) => {
 });
 
 // ---- notificações ------------------------------------------------------------
-rota('GET', '/api/notificacoes', ['ti', 'admin'], (ctx) => {
-  const lista = d.db.notificacoes.slice().sort((a, b) => (a.em < b.em ? 1 : -1)).slice(0, 100);
+// Todo usuário autenticado consulta o próprio sino: TI/admin veem os avisos
+// da equipe + os pessoais; os demais, apenas os pessoais.
+rota('GET', '/api/notificacoes', null, (ctx) => {
+  const lista = d.db.notificacoes
+    .filter((n) => notificacaoVisivel(n, ctx.usuario))
+    .sort((a, b) => (a.em < b.em ? 1 : -1)).slice(0, 100);
   sendJson(ctx.res, 200, { notificacoes: lista });
 });
 
-rota('GET', '/api/notificacoes/pendentes', ['ti', 'admin'], (ctx) => {
-  const lista = d.db.notificacoes.filter((n) => !n.reconhecidaPor);
-  sendJson(ctx.res, 200, { notificacoes: lista });
+rota('GET', '/api/notificacoes/pendentes', null, (ctx) => {
+  const lista = d.db.notificacoes.filter((n) => !n.reconhecidaPor && notificacaoVisivel(n, ctx.usuario));
+  // `escopo` diz de quais avisos esta conta enxerga: 'equipe' (TI/admin, o que
+  // o notificador de bandeja precisa) ou 'pessoal' (só os do próprio usuário).
+  // Antes, uma conta errada no notificador levava 403; agora receberia 200 com
+  // lista vazia — este campo mantém o diagnóstico possível.
+  sendJson(ctx.res, 200, {
+    notificacoes: lista,
+    escopo: podeAtenderChamado(ctx.usuario) ? 'equipe' : 'pessoal',
+  });
 });
 
-rota('POST', '/api/notificacoes/:id/reconhecer', ['ti', 'admin'], (ctx) => {
+// Marca de uma vez tudo o que este usuário está vendo no sino.
+rota('POST', '/api/notificacoes/reconhecer-todas', null, (ctx) => {
+  let n = 0;
+  for (const x of d.db.notificacoes) {
+    if (!x.reconhecidaPor && notificacaoVisivel(x, ctx.usuario)) {
+      x.reconhecidaPor = { id: ctx.usuario.id, nome: ctx.usuario.nome, em: d.agora() };
+      n++;
+    }
+  }
+  if (n) { d.flush(); notifyChange('notificacoes'); }
+  sendJson(ctx.res, 200, { reconhecidas: n });
+});
+
+rota('POST', '/api/notificacoes/:id/reconhecer', null, (ctx) => {
   const n = d.db.notificacoes.find((x) => x.id === ctx.params.id);
   if (!n) return erro(ctx.res, 404, 'Notificação não encontrada.');
+  if (!notificacaoVisivel(n, ctx.usuario)) return erro(ctx.res, 403, 'Esta notificação não é sua.');
   if (!n.reconhecidaPor) {
     n.reconhecidaPor = { id: ctx.usuario.id, nome: ctx.usuario.nome, em: d.agora() };
     d.flush();
@@ -592,22 +1186,12 @@ rota('POST', '/api/homeoffice', null, (ctx) => {
 
   // O líder abre o chamado em nome do colaborador: a TI fica sabendo do que
   // saiu e o chamado passa a ser a lista oficial de itens autorizados.
-  const chamado = {
-    id: d.novoIdChamado(),
-    criadoEm: d.agora(),
-    atualizadoEm: d.agora(),
-    solicitante: { id: ctx.usuario.id, nome: ctx.usuario.nome },
+  const chamado = novoChamadoObj(ctx.usuario, {
     titulo: txt('Home Office — ' + colaborador.nome, 140),
     descricao: txt(descricaoChamadoHO(registro, ctx.usuario), 4000),
     categoria: 'equipamento',
     prioridade: 'media',
-    urgente: false,
-    status: 'pendente',
-    responsavel: null,
-    finalizadoEm: null,
-    comentarios: [],
-    historico: [],
-  };
+  });
   historico(chamado, ctx.usuario, 'Chamado aberto.',
     'Saída de equipamento para Home Office (' + registro.id + ') — devolver até ' + dataBR(registro.prazoDevolucao) + '.');
   d.db.chamados.push(chamado);
@@ -661,24 +1245,14 @@ rota('POST', '/api/homeoffice/:id/devolucao', null, (ctx) => {
       'Devolução Home Office — ' + chamado.id,
       ctx.usuario.nome + ' informou a devolução dos aparelhos (' + reg.id + '): ' + reg.itens.join(', ').slice(0, 140));
   } else {
-    chamado = {
-      id: d.novoIdChamado(),
-      criadoEm: d.agora(),
-      atualizadoEm: d.agora(),
-      solicitante: { id: ctx.usuario.id, nome: ctx.usuario.nome },
-      titulo: 'Devolução Home Office ' + reg.id + ' — ' + reg.colaborador.nome,
-      descricao: 'Devolução dos aparelhos levados para Home Office em ' + dataBR(reg.dataLevada) + ':\n- ' +
+    chamado = novoChamadoObj(ctx.usuario, {
+      titulo: txt('Devolução Home Office ' + reg.id + ' — ' + reg.colaborador.nome, 140),
+      descricao: txt('Devolução dos aparelhos levados para Home Office em ' + dataBR(reg.dataLevada) + ':\n- ' +
         reg.itens.join('\n- ') + (observacao ? '\n\nObservação: ' + observacao : '') +
-        '\n\n' + textoFoto,
+        '\n\n' + textoFoto, 4000),
       categoria: 'equipamento',
       prioridade: 'media',
-      urgente: false,
-      status: 'pendente',
-      responsavel: null,
-      finalizadoEm: null,
-      comentarios: [],
-      historico: [],
-    };
+    });
     historico(chamado, ctx.usuario, 'Chamado aberto.', 'Devolução de equipamentos de Home Office (' + reg.id + ').');
     d.db.chamados.push(chamado);
     criarNotificacao('novo_chamado', chamado,
