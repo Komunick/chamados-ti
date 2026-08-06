@@ -8,11 +8,52 @@ sozinha (urgentes → prioridade → mais antigo). Cada chamado tem **status**
 
 A TI recebe **notificações insistentes na barra de tarefas do Windows** a cada
 novo chamado (e também quando solicitantes mudam status ou comentam), até
-marcar como vista.
+marcar como vista. O **solicitante** também tem sino: é avisado quando o status
+do chamado dele muda ou quando a TI escreve uma observação.
 
 Mesma arquitetura dos outros sistemas: servidor **Node puro, sem dependências**,
 dados **fora da pasta web**, acesso pela rede **ZeroTier**, senhas com scrypt,
 sessões de 30 dias, tempo real por SSE.
+
+A interface é **mobile-first** (design Google Stitch "Fila Leve"): no celular,
+navegação inferior fixa, botão flutuante de novo chamado e telas em folha
+deslizante; no computador, abas no topo e painel lateral. Modo claro/escuro com
+preferência salva.
+
+## O que o sistema faz
+
+| Recurso | Como funciona |
+|---|---|
+| **Fila com posição** | Ordena por urgência → prioridade → chegada. Cada um vê em que lugar está o próprio chamado. |
+| **Prazo (SLA)** | Urgente 4 h · Alta 1 dia · Média 3 dias · Baixa 5 dias. Pill no cartão mostra *vence em X* / *atrasado*; chip **⚠ Fora do prazo** filtra os estourados. |
+| **Anexos** | Fotos do erro na abertura e nas observações (comprimidas no navegador, guardadas em `ti-data\anexos\`). |
+| **Avaliação** | O solicitante dá 1–5 ⭐ quando o chamado é finalizado, com comentário opcional. |
+| **Base de conhecimento** | Aba **Ajuda**: guias escritos pela TI. Ao digitar o título de um chamado novo, o sistema sugere artigos que talvez resolvam na hora. |
+| **Painel de indicadores** | Aba **Painel** (TI, admin e líderes): volume, tempo médio, % dentro do prazo, nota média, atrasados, reaberturas, série diária e carga por atendente — 7/30/90 dias. |
+| **Responsável** | *Atribuir a mim* ou escolher o técnico; chip **Meus atendimentos** filtra a carga de cada um. |
+| **Reabertura** | O solicitante reabre em até **7 dias** da finalização explicando o que voltou; a TI reabre a qualquer momento. O histórico é mantido. |
+| **Avisos externos** | E-mail (SMTP) e/ou webhook (WhatsApp, n8n, Zapier) — opcionais, ver abaixo. |
+
+## Avisos por e-mail e WhatsApp (opcional)
+
+Desligados por padrão. Na primeira execução o servidor cria
+`ti-data\notificar-config.json`:
+
+```json
+{
+  "email":   { "ativo": false, "host": "smtp.exemplo.com", "porta": 465,
+               "usuario": "", "senha": "", "de": "Chamados TI <ti@empresa.com.br>" },
+  "webhook": { "ativo": false, "url": "https://exemplo.com/webhook-chamados" }
+}
+```
+
+- **email** — SMTP direto (porta 465 com TLS, ou 587 com STARTTLS). Envia para o
+  e-mail cadastrado no usuário (painel 👤 → *Contatos*).
+- **webhook** — `POST` JSON com `{ evento, assunto, mensagem, chamadoId, para }`
+  para o seu gateway de WhatsApp ou fluxo de automação.
+
+O arquivo é lido a cada envio: dá para ligar/desligar **sem reiniciar** o
+servidor. Falha de envio vira linha no console e nunca derruba o chamado.
 
 ## Pastas
 
@@ -20,12 +61,14 @@ sessões de 30 dias, tempo real por SSE.
 Sistema-chamados-ti\
 ├── ti-web\               ← app + servidor (porta 8085)
 │   ├── index.html / app.js / styles.css
-│   ├── server\server.js + server\db.js
+│   ├── logo-brazil-transports.svg / logo-simbolo.svg
+│   ├── server\server.js + server\db.js + server\notificar.js
 │   ├── start-server.bat        ← inicia o servidor (com loop de reinício)
 │   ├── run-hidden.vbs          ← inicia escondido (sem janela)
 │   ├── INSTALAR-AUTOINICIO.bat ← servidor sobe sozinho no boot (pede admin)
 │   └── LIBERAR-FIREWALL.bat    ← libera a porta 8085 só para o ZeroTier
-├── ti-data\              ← criada sozinha: chamados-ti.json, backups\
+├── ti-data\              ← criada sozinha: chamados-ti.json, backups\,
+│                            anexos\, ho-anexos\, notificar-config.json
 └── notificador\          ← roda na máquina de QUEM ATENDE (a TI)
 ```
 
@@ -48,6 +91,12 @@ Sistema-chamados-ti\
 3. `INSTALAR-NOTIFICADOR.bat` — passa a iniciar junto com o Windows, escondido.
 
 O aviso repete a cada 5 minutos até ser marcado como visto (sino 🔔 no app).
+
+O sino agora é de **todos**: o solicitante recebe aviso quando o status do
+chamado dele muda ou quando a TI comenta. `GET /api/notificacoes/pendentes`
+devolve `escopo: "equipe"` para TI/admin (o que o notificador consome) e
+`escopo: "pessoal"` para os demais — se o notificador estiver configurado com
+um usuário sem permissão de atendimento, é por aí que se percebe.
 
 ## Home Office 🏠 (saída de equipamento)
 
